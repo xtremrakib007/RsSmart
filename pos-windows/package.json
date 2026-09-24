@@ -18,7 +18,7 @@
     "@tauri-apps/plugin-dialog": "^2.0.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-router-dom": "^6.22.0",
+    "react-router-dom": "^7.18.4",
     "zustand": "^4.5.0",
     "lucide-react": "^0.344.0",
     "clsx": "^2.1.0",
