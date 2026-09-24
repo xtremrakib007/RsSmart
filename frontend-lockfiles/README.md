@@ -1,17 +1,9 @@
 # Frontend Lockfiles
 
 ## Status
-- `erp-windows/package-lock.json` — NOT committed yet
-- `pos-windows/package-lock.json` — NOT committed yet
+- `erp-windows/package-lock.json` — committed
+- `pos-windows/package-lock.json` — committed
 
-## To generate
-```bash
-cd erp-windows && npm install
-cd ../pos-windows && npm install
-# Commit the resulting package-lock.json files
-git add erp-windows/package-lock.json pos-windows/package-lock.json
-```
-
-## Why this matters
-`npm ci` (used in CI) requires an exact lockfile. Without it, CI falls back
-to `npm install` which may resolve slightly different dependency versions.
+CI installs both frontends with `npm ci`, which requires the lockfile to be
+in sync with `package.json`. After changing dependencies, run `npm install`
+in the project directory and commit the updated `package-lock.json`.

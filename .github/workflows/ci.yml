@@ -1,10 +1,5 @@
 name: CI
 
-# NOTE: Frontend projects (erp-windows, pos-windows) currently use
-# `npm install` instead of `npm ci` because their package-lock.json files
-# are not yet committed. After the first successful local install, commit
-# the lockfiles and switch these jobs to `npm ci`.
-
 on:
   push:
     branches: [main, master]
@@ -144,8 +139,7 @@ jobs:
           cache-dependency-path: erp-windows/package-lock.json
 
       - name: Install dependencies
-        # TODO: commit package-lock.json after first local install
-        run: npm install --prefer-offline --no-audit
+        run: npm ci --prefer-offline --no-audit
 
       - name: TypeScript check + Vite build
         run: npm run build
@@ -178,8 +172,7 @@ jobs:
           cache-dependency-path: pos-windows/package-lock.json
 
       - name: Install dependencies
-        # TODO: commit package-lock.json after first local install
-        run: npm install --prefer-offline --no-audit
+        run: npm ci --prefer-offline --no-audit
 
       - name: TypeScript check + Vite build
         run: npm run build
