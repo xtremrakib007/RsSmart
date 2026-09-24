@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: erp-api
+  namespace: erp-production
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: erp-api
+  template:
+    metadata:
+      labels:
+        app: erp-api
+    spec:
+      containers:
+        - name: api
+          image: ghcr.io/your-org/erp-api:latest
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: erp-config
+            - secretRef:
+                name: erp-secrets
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5

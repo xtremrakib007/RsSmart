@@ -1,0 +1,32 @@
+[package]
+name = "rssmart-erp-windows"
+version = "1.0.0"
+description = "RsSmart-ERP for Windows"
+authors = ["Retail Team"]
+license = ""
+repository = ""
+edition = "2021"
+rust-version = "1.75"
+
+[build-dependencies]
+tauri-build = { version = "2.0.0", features = [] }
+
+[dependencies]
+tauri = { version = "2.0.0", features = [] }
+tauri-plugin-sql = { version = "2.0.0", features = ["sqlite"] }
+tauri-plugin-dialog = "2.0.0"
+tauri-plugin-fs = "2.0.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.35", features = ["full"] }
+reqwest = { version = "0.11", features = ["json"] }
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.6", features = ["v4", "serde"] }
+thiserror = "1.0"
+log = "0.4"
+env_logger = "0.11"
+csv = "1.3"
+anyhow = "1.0"
+
+[features]
+custom-protocol = ["tauri/custom-protocol"]

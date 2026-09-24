@@ -1,0 +1,15 @@
+# Referenced by api-deployment.yaml's envFrom.configMapRef (name: erp-config).
+# Safe to commit — no secrets here. Copy to configmap.yaml, adjust, and
+# `kubectl apply -f` it (or let the production kustomization apply it —
+# see overlays/production/kustomization.yaml).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: erp-config
+  namespace: erp-production
+data:
+  NODE_ENV: "production"
+  PORT: "8080"
+  CORS_ORIGINS: "https://app.yourdomain.com"
+  REDIS_HOST: "redis"
+  REDIS_PORT: "6379"

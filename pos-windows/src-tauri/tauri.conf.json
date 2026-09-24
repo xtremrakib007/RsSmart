@@ -1,0 +1,53 @@
+{
+  "productName": "RsSmart-POS",
+  "version": "1.0.0",
+  "identifier": "com.retail.pos.windows",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Retail POS",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 1024,
+        "minHeight": 768,
+        "resizable": true,
+        "fullscreen": false,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": null,
+      "capabilities": ["main-capability"]
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["msi", "nsis"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": "",
+      "webviewInstallMode": {
+        "type": "embedBootstrapper"
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6ID...",
+      "endpoints": ["https://api.retail.example.com/updates/windows"]
+    }
+  }
+}

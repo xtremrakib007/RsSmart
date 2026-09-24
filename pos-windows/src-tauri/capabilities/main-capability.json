@@ -1,0 +1,16 @@
+{
+  "identifier": "main-capability",
+  "description": "Main capability for Retail POS",
+  "local": true,
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "sql:default",
+    "sql:allow-execute",
+    "dialog:default",
+    "updater:default",
+    "updater:allow-check",
+    "updater:allow-download",
+    "updater:allow-install"
+  ]
+}

@@ -1,0 +1,14 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: erp-staging
+
+resources:
+  - ../../base
+
+images:
+  - name: ghcr.io/your-org/erp-api
+    newTag: staging
+
+patchesStrategicMerge:
+  - patch-replicas.yaml

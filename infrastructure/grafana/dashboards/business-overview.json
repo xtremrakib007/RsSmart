@@ -1,0 +1,57 @@
+{
+  "dashboard": {
+    "title": "RsSmart — Business Overview",
+    "tags": ["rssmart", "business"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "title": "Active Tenants",
+        "type": "singlestat",
+        "targets": [
+          {
+            "expr": "rssmart_active_tenants",
+            "legendFormat": "Companies"
+          }
+        ],
+        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0}
+      },
+      {
+        "title": "POS Sales Today",
+        "type": "singlestat",
+        "targets": [
+          {
+            "expr": "increase(rssmart_pos_sale_total[1d])",
+            "legendFormat": "Sales"
+          }
+        ],
+        "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0}
+      },
+      {
+        "title": "Subscription Distribution",
+        "type": "piechart",
+        "targets": [
+          {
+            "expr": "rssmart_subscription_status",
+            "legendFormat": "{{status}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+      },
+      {
+        "title": "WhatsApp Message Status",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(whatsapp_messages_sent_total[5m])",
+            "legendFormat": "Sent"
+          },
+          {
+            "expr": "rate(whatsapp_messages_failed_total[5m])",
+            "legendFormat": "Failed"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4}
+      }
+    ]
+  }
+}

@@ -1,0 +1,67 @@
+groups:
+  - name: rssmart-api
+    rules:
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m]) > 0.01
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "API error rate > 1%"
+          description: "{{ $value }}% of requests are failing"
+
+      - alert: HighLatency
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 0.5
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API p95 latency > 500ms"
+
+      - alert: DatabaseConnectionsHigh
+        expr: pg_stat_activity_count / pg_settings_max_connections > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "DB connection pool > 80%"
+
+      - alert: RedisMemoryHigh
+        expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis memory > 80%"
+
+      - alert: WhatsAppFailureRate
+        expr: rate(whatsapp_messages_failed_total[10m]) / rate(whatsapp_messages_sent_total[10m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "WhatsApp failure rate > 5%"
+
+      - alert: PaymentWebhookFailures
+        expr: rate(subscription_checkouts_webhook_failed_total[10m]) > 0.1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Payment webhooks failing"
+
+      - alert: BullMQQueueDepth
+        expr: bullmq_queue_waiting > 1000
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "BullMQ queue depth > 1000"
+
+      - alert: BackupFailed
+        expr: time() - postgres_backup_last_success > 86400
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "No successful DB backup in 24h"

@@ -1,0 +1,12 @@
+ALTER TABLE "whatsapp_accounts" ADD COLUMN "created_by_user_id" TEXT;
+ALTER TABLE "whatsapp_contacts" ADD COLUMN "created_by_user_id" TEXT;
+ALTER TABLE "whatsapp_conversations" ADD COLUMN "archived_at" TIMESTAMP(3);
+ALTER TABLE "whatsapp_conversations" ADD COLUMN "last_read_at" TIMESTAMP(3);
+ALTER TABLE "whatsapp_conversations" ADD COLUMN "tags" JSONB NOT NULL DEFAULT '[]';
+ALTER TABLE "whatsapp_conversations" ADD COLUMN "internal_notes" JSONB NOT NULL DEFAULT '[]';
+ALTER TABLE "whatsapp_accounts" ADD CONSTRAINT "whatsapp_accounts_created_by_user_id_fkey" FOREIGN KEY ("created_by_user_id") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "whatsapp_contacts" ADD CONSTRAINT "whatsapp_contacts_created_by_user_id_fkey" FOREIGN KEY ("created_by_user_id") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "whatsapp_conversations" ADD CONSTRAINT "whatsapp_conversations_assigned_user_id_fkey" FOREIGN KEY ("assigned_user_id") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "whatsapp_messages" ADD CONSTRAINT "whatsapp_messages_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+CREATE INDEX "whatsapp_conversations_tenant_id_archived_at_idx" ON "whatsapp_conversations"("tenant_id","archived_at");
+CREATE INDEX "whatsapp_conversations_tenant_id_assigned_user_id_idx" ON "whatsapp_conversations"("tenant_id","assigned_user_id");

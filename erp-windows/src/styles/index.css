@@ -1,0 +1,24 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-gray-50 text-gray-900 antialiased;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  }
+}
+
+@layer components {
+  .btn-primary { @apply bg-primary-600 hover:bg-primary-700 text-white font-medium px-4 py-2 rounded-lg transition-colors; }
+  .btn-secondary { @apply bg-secondary-600 hover:bg-secondary-700 text-white font-medium px-4 py-2 rounded-lg transition-colors; }
+  .btn-accent { @apply bg-accent-600 hover:bg-accent-700 text-white font-medium px-4 py-2 rounded-lg transition-colors; }
+  .btn-ghost { @apply text-gray-600 hover:text-gray-900 hover:bg-gray-100 px-3 py-2 rounded-lg transition-colors; }
+  .card { @apply bg-white rounded-xl shadow-sm border border-gray-200 p-4; }
+  .input { @apply w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent; }
+  .badge { @apply px-2 py-0.5 rounded-full text-xs font-medium; }
+  .badge-green { @apply badge bg-green-100 text-green-700; }
+  .badge-yellow { @apply badge bg-yellow-100 text-yellow-700; }
+  .badge-red { @apply badge bg-red-100 text-red-700; }
+  .badge-blue { @apply badge bg-blue-100 text-blue-700; }
+}

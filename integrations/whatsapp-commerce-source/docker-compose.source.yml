@@ -1,0 +1,97 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: wc_postgres
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-whatsapp_commerce}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/01_init.sql
+      - ./backend/src/database/migrations:/docker-entrypoint-initdb.d/migrations
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-whatsapp_commerce}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - wc_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: wc_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - wc_network
+
+  backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    container_name: wc_backend
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: ${PORT:-5000}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-whatsapp_commerce}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      JWT_SECRET: ${JWT_SECRET}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET}
+      WHATSAPP_ACCESS_TOKEN: ${WHATSAPP_ACCESS_TOKEN}
+      WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID}
+      WHATSAPP_BUSINESS_ACCOUNT_ID: ${WHATSAPP_BUSINESS_ACCOUNT_ID}
+    ports:
+      - "${PORT:-5000}:5000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend/src:/app/src
+      - /app/node_modules
+    networks:
+      - wc_network
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+    container_name: wc_frontend
+    environment:
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:5000/api}
+    ports:
+      - "${FRONTEND_PORT:-5173}:5173"
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend/src:/app/src
+      - /app/node_modules
+    networks:
+      - wc_network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  wc_network:
+    driver: bridge

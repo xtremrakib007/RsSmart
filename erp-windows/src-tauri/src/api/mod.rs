@@ -1,0 +1,10 @@
+pub mod product;
+pub mod purchase;
+pub mod accounting;
+pub mod hr;
+pub mod audit;
+pub mod approval;
+pub mod report;
+pub mod dashboard;
+pub mod sync;
+pub mod branding;

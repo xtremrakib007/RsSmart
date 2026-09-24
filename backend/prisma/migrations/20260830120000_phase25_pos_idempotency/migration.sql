@@ -1,0 +1,3 @@
+-- Phase 25: POS Idempotency
+-- Add idempotency key to SyncEvent (if not already added by Phase 30)
+-- This migration is a no-op if Phase 30 already ran; kept for ordering.

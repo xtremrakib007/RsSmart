@@ -1,0 +1,25 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: erp-ingress
+  namespace: erp-production
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - api.yourdomain.com
+      secretName: erp-tls
+  rules:
+    - host: api.yourdomain.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: erp-api
+                port:
+                  number: 80

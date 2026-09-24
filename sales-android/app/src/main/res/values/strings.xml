@@ -1,0 +1,18 @@
+<resources>
+    <string name="app_name">Sales App</string>
+    <string name="login_title">Sales Force</string>
+    <string name="login_subtitle">Sign in to your account</string>
+    <string name="email">Email</string>
+    <string name="password">Password</string>
+    <string name="sign_in">Sign In</string>
+    <string name="dashboard">Dashboard</string>
+    <string name="customers">Customers</string>
+    <string name="orders">Orders</string>
+    <string name="visits">Visits</string>
+    <string name="collections">Collections</string>
+    <string name="expenses">Expenses</string>
+    <string name="sync">Sync</string>
+    <string name="offline_mode">Offline Mode</string>
+    <string name="online">Online</string>
+    <string name="pending_sync">Pending Sync</string>
+</resources>
