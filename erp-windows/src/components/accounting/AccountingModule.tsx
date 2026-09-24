@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getChartOfAccounts, getJournalEntries, createJournalEntry, postJournalEntry } from '@/lib/tauri-api';
-import { BookOpen, Plus, Search, CheckCircle, AlertCircle, ChevronRight, ChevronDown } from 'lucide-react';
+import { Plus, Search, CheckCircle, AlertCircle, ChevronRight, ChevronDown } from 'lucide-react';
 import type { ChartOfAccount, JournalEntry, JournalLine } from '@/types';
 
 export default function AccountingModule() {

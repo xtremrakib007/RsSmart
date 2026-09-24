@@ -1,4 +1,4 @@
-import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
+import { Outlet, Link, useLocation } from 'react-router-dom';
 import { usePosStore } from '@/lib/store';
 import { ShoppingCart, Package, RotateCcw, Wifi, WifiOff, Printer, LogOut } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -6,7 +6,6 @@ import { getPendingSyncCount, getBranding, logout } from '@/lib/tauri-api';
 
 export default function Layout() {
   const location = useLocation();
-  const navigate = useNavigate();
   const session = usePosStore(s => s.currentSession);
   const itemCount = usePosStore(s => s.itemCount());
   const [pendingSync, setPendingSync] = useState(0);

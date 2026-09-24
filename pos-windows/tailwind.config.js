@@ -4,8 +4,8 @@ export default {
   theme: {
     extend: {
       colors: {
-        primary: { 50: '#e3f2fd', 100: '#bbdefb', 500: '#1976d2', 600: '#1565c0', 700: '#0d47a1' },
-        secondary: { 50: '#e8f5e9', 100: '#c8e6c9', 500: '#388e3c', 600: '#2e7d32' },
+        primary: { 50: '#e3f2fd', 100: '#bbdefb', 200: '#90caf9', 500: '#1976d2', 600: '#1565c0', 700: '#0d47a1' },
+        secondary: { 50: '#e8f5e9', 100: '#c8e6c9', 500: '#388e3c', 600: '#2e7d32', 700: '#1b5e20' },
       },
     },
   },

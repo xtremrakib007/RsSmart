@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { usePosStore } from '@/lib/store';
 import { getProducts, searchProducts, getProductByBarcode } from '@/lib/tauri-api';
-import { Search, Plus, Minus, ShoppingCart, Barcode } from 'lucide-react';
+import { Search, Plus, ShoppingCart, Barcode } from 'lucide-react';
 import type { Product } from '@/types';
 
 export default function ProductCatalog() {

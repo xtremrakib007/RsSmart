@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { exportToExcel, exportToPdf } from '@/lib/tauri-api';
-import { FileSpreadsheet, FileText, Filter, Calendar, Download } from 'lucide-react';
+import { FileSpreadsheet, FileText, Filter, Calendar } from 'lucide-react';
 import type { ReportFilter } from '@/types';
 
 const reportTypes = [

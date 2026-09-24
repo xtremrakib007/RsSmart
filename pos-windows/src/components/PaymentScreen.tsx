@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { usePosStore } from '@/lib/store';
 import { printReceipt, openCashDrawer, recordPayment } from '@/lib/tauri-api';
-import { CheckCircle, Printer, Drawer, ArrowRight, CreditCard, Banknote, Smartphone } from 'lucide-react';
+import { CheckCircle, Printer, Archive, ArrowRight, CreditCard, Banknote, Smartphone } from 'lucide-react';
 import type { PaymentMethod, SplitPayment } from '@/types';
 
 export default function PaymentScreen() {
@@ -180,7 +180,7 @@ export default function PaymentScreen() {
           onClick={handleOpenDrawer}
           className="w-full py-2 border rounded-lg hover:bg-gray-50 flex items-center justify-center gap-2 text-sm"
         >
-          <Drawer className="w-4 h-4" />
+          <Archive className="w-4 h-4" />
           {drawerOpened ? 'Drawer Opened!' : 'Open Cash Drawer'}
         </button>
 

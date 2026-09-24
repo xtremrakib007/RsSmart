@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { AgGridReact } from 'ag-grid-react';
+import type { ColDef } from 'ag-grid-community';
 import { useErpStore } from '@/lib/store';
 import { getProducts, getInventoryMovements, saveProduct, deleteProduct, recordMovement } from '@/lib/tauri-api';
 import { Plus, Search, Filter, Download, AlertTriangle } from 'lucide-react';
@@ -9,7 +10,7 @@ import 'ag-grid-community/styles/ag-theme-alpine.css';
 
 export default function InventoryManager() {
   const [products, setProducts] = useState<Product[]>([]);
-  const [movements, setMovements] = useState<InventoryMovement[]>([]);
+  const [, setMovements] = useState<InventoryMovement[]>([]);
   const [search, setSearch] = useState('');
   const [showAdd, setShowAdd] = useState(false);
   const [showMove, setShowMove] = useState(false);
@@ -30,7 +31,7 @@ export default function InventoryManager() {
     p.barcode?.includes(search)
   );
 
-  const columnDefs = [
+  const columnDefs: ColDef<Product>[] = [
     { field: 'sku', headerName: 'SKU', width: 120, sortable: true, filter: true },
     { field: 'name', headerName: 'Product Name', flex: 1, sortable: true, filter: true },
     { field: 'categoryName', headerName: 'Category', width: 130, sortable: true },
@@ -114,7 +115,7 @@ export default function InventoryManager() {
             paginationPageSize={20}
             animateRows={true}
             rowSelection="single"
-            onRowClicked={(e) => setSelectedProduct(e.data)}
+            onRowClicked={(e) => setSelectedProduct(e.data ?? null)}
           />
         </div>
       </div>

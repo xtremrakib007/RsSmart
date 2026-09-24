@@ -51,7 +51,6 @@ export default function SyncMonitor() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {devices.map(device => {
           const config = statusConfig[device.status] || statusConfig.HEALTHY;
-          const StatusIcon = config.icon;
           return (
             <div key={device.deviceId} className="card">
               <div className="flex items-start justify-between mb-3">

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getUsers, saveUser, deleteUser } from '@/lib/tauri-api';
-import { Plus, Search, Shield, UserX, UserCheck, Mail } from 'lucide-react';
+import { Plus, Search, UserX, UserCheck, Mail } from 'lucide-react';
 import type { User } from '@/types';
 
 const roleColors: Record<string, string> = {
