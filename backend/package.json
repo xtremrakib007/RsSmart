@@ -26,7 +26,7 @@
     "verify:production": "node scripts/verify-production-readiness.mjs"
   },
   "dependencies": {
-    "@nestjs/bullmq": "^10.0.0",
+    "@nestjs/bullmq": "^12.0.0",
     "@nestjs/common": "^10.0.0",
     "@nestjs/core": "^10.0.0",
     "@nestjs/jwt": "^10.0.0",
