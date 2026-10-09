@@ -22,7 +22,7 @@ describe('OrdersService', () => {
   };
 
   beforeEach(async () => {
-    prisma = { order: { update: jest.fn().mockResolvedValue(updatedOrder), findMany: jest.fn().mockResolvedValue([]) } };
+    prisma = { order: { update: jest.fn().mockResolvedValue(updatedOrder), updateMany: jest.fn().mockResolvedValue({ count: 1 }), findFirst: jest.fn().mockResolvedValue(updatedOrder), findMany: jest.fn().mockResolvedValue([]) } };
     notifications = { sendOrderConfirmationIfApplicable: jest.fn().mockResolvedValue(undefined) };
     push = { sendToUser: jest.fn().mockResolvedValue(undefined) };
 
