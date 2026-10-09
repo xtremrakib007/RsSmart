@@ -54,6 +54,7 @@ export class OrdersController {
   }
 
   @Put(':id/status')
+  @RequirePermissions(Permission.SALES_CREATE)
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Update order status' })
   updateStatus(
