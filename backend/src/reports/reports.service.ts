@@ -110,7 +110,7 @@ export class ReportsService {
 
     const payments = await this.prisma.payment.findMany({
       where,
-      include: { order: { select: { id: true, orderNumber: true, customer: { select: { id: true, name: true } }, salesRep: { select: { id: true, firstName: true, lastName: true } } } } },
+      select: { id: true, orderId: true, amount: true, method: true, createdAt: true, order: { select: { id: true, orderNumber: true, customer: { select: { id: true, name: true } }, salesRep: { select: { id: true, firstName: true, lastName: true } } } } },
       orderBy: { createdAt: 'desc' },
     });
 
