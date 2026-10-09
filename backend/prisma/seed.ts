@@ -36,9 +36,9 @@ async function main() {
   const roles = await prisma.role.createMany({
     data: [
       { tenantId: tenant.id, name: 'admin', description: 'Full system access', permissions: ['*'], isSystem: true },
-      { tenantId: tenant.id, name: 'manager', description: 'Manage operations', permissions: ['users.read', 'users.write', 'products.*', 'orders.*', 'customers.*', 'reports.*'], isSystem: true },
+      { tenantId: tenant.id, name: 'manager', description: 'Manage operations', permissions: ['users.read', 'users.write', 'products.*', 'orders.*', 'customers.*', 'inventory.read', 'inventory.adjust', 'reports.*'], isSystem: true },
       { tenantId: tenant.id, name: 'sales_rep', description: 'Field sales', permissions: ['customers.*', 'orders.create', 'orders.read', 'visits.*'], isSystem: true },
-      { tenantId: tenant.id, name: 'cashier', description: 'POS operations', permissions: ['pos.*', 'products.read', 'customers.read'], isSystem: true },
+      { tenantId: tenant.id, name: 'cashier', description: 'POS operations', permissions: ['pos.*', 'products.read', 'customers.read', 'inventory.read'], isSystem: true },
       { tenantId: tenant.id, name: 'accountant', description: 'Financial operations', permissions: ['orders.read', 'payments.*', 'reports.*'], isSystem: true },
     ],
   });
