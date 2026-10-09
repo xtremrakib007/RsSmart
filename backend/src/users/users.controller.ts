@@ -19,12 +19,14 @@ export class UsersController {
   ) {}
 
   @Get()
+  @RequirePermissions(Permission.USERS_READ)
   @ApiOperation({ summary: 'Get all users in tenant' })
   findAll(@CurrentUser() user: any) {
     return this.usersService.findAll(user.tenantId);
   }
 
   @Get(':id')
+  @RequirePermissions(Permission.USERS_READ)
   @ApiOperation({ summary: 'Get user by ID' })
   findOne(@Param('id') id: string, @CurrentUser() user: any) {
     return this.usersService.findOne(id, user.tenantId);
@@ -79,6 +81,7 @@ export class UsersController {
   }
 
   @Get('roles/list')
+  @RequirePermissions(Permission.USERS_READ)
   @ApiOperation({ summary: 'Get all roles' })
   getRoles(@CurrentUser() user: any) {
     return this.usersService.getRoles(user.tenantId);
