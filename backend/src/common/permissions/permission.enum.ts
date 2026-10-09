@@ -56,6 +56,7 @@ export function hasPermission(userPermissions: string[] | undefined, required: P
 
   return userPermissions.some((grant) => {
     if (typeof grant !== 'string') return false;
+    if (required === Permission.USERS_MANAGE && grant === 'users.write') return true;
     if (grant.endsWith('.*')) {
       return acceptedNamespaces.includes(grant.slice(0, -2));
     }
