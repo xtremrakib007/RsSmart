@@ -52,8 +52,8 @@ export class OrdersService {
     return this.prisma.order.findMany({
       where,
       include: {
-        customer: true,
-        salesRep: { omit: { password: true } },
+        customer: { select: { id: true, code: true, name: true, email: true, phone: true } },
+        salesRep: { select: { id: true, firstName: true, lastName: true } },
         items: {
           include: {
             product: {
@@ -61,7 +61,7 @@ export class OrdersService {
             },
           },
         },
-        payments: true,
+        payments: { select: { id: true, amount: true, method: true, reference: true, createdAt: true } },
       },
       skip: (page - 1) * limit,
       take: limit,
@@ -191,7 +191,7 @@ export class OrdersService {
         },
       },
       include: {
-        customer: true,
+        customer: { select: { id: true, code: true, name: true, email: true, phone: true } },
         items: { include: { product: { select: { id: true, sku: true, name: true, barcode: true, basePrice: true, taxRate: true } } } },
       },
     });
