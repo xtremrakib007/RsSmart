@@ -181,6 +181,22 @@ export class SubscriptionCheckoutService {
       return { received: true, matched: false };
     }
 
+    // A provider reference is globally unique, but that alone does not
+    // prove this callback came from the provider that owns the checkout.
+    // Never let a Billplz callback finalize a row created for another provider.
+    if (String(checkout.provider).toLowerCase() !== 'billplz') {
+      this.logger.warn('Billplz webhook provider mismatch for checkout ' + checkout.id);
+      await this.audit.log({
+        tenantId: checkout.tenantId,
+        userId: undefined,
+        action: 'SUBSCRIPTION_CHECKOUT_PROVIDER_MISMATCH',
+        entityType: 'SubscriptionCheckout',
+        entityId: checkout.id,
+        newValues: { receivedProvider: 'billplz', expectedProvider: checkout.provider },
+      });
+      return { received: true, matched: false };
+    }
+
     if (checkout.webhookProcessedAt) {
       // Already terminal — replayed delivery, not an error.
       return { received: true, duplicate: true, status: checkout.status };
