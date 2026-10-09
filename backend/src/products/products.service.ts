@@ -53,13 +53,26 @@ export class ProductsService {
       if (!unit) throw new BadRequestException('Unit not found for this company');
     }
 
+    if (typeof data.sku !== 'string' || !data.sku.trim() ||
+        typeof data.name !== 'string' || !data.name.trim() ||
+        !Number.isFinite(Number(data.basePrice)) || Number(data.basePrice) < 0) {
+      throw new BadRequestException('Product SKU, name, and a non-negative base price are required');
+    }
     const existing = await this.prisma.product.findUnique({
       where: { tenantId_sku: { tenantId, sku: data.sku } },
     });
     if (existing) throw new BadRequestException('SKU already exists');
 
+    const allowed = [
+      'sku', 'name', 'description', 'barcode', 'categoryId', 'unitId',
+      'basePrice', 'costPrice', 'taxRate', 'isActive', 'trackInventory',
+      'minStock', 'maxStock', 'attributes', 'images',
+    ];
+    const safeData = Object.fromEntries(
+      allowed.filter((key) => Object.prototype.hasOwnProperty.call(data, key)).map((key) => [key, data[key]]),
+    );
     return this.prisma.product.create({
-      data: { ...data, tenantId },
+      data: { ...safeData, tenantId },
       include: { category: true, unit: true },
     });
   }
