@@ -4,6 +4,14 @@ import * as bcrypt from 'bcrypt';
 const prisma = new PrismaClient();
 
 async function main() {
+  // This seed creates publicly predictable demo identities and must never run in production.
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('Refusing to run demo seed in production');
+  }
+  const seedPassword = process.env.DEMO_SEED_PASSWORD;
+  if (!seedPassword || seedPassword.length < 16) {
+    throw new Error('Set DEMO_SEED_PASSWORD to a value of at least 16 characters before running the demo seed');
+  }
   console.log('🌱 Starting database seed...');
 
   // ─── TENANT ─────────────────────────────────────────────
@@ -42,7 +50,7 @@ async function main() {
   const cashierRole = await prisma.role.findFirst({ where: { tenantId: tenant.id, name: 'cashier' } });
 
   // ─── USERS ──────────────────────────────────────────────
-  const hashedPassword = await bcrypt.hash('password123', 12);
+  const hashedPassword = await bcrypt.hash(seedPassword, 12);
 
   const users = await prisma.user.createMany({
     data: [
