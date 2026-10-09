@@ -152,6 +152,9 @@ export class PosTransactionsService {
       where: { id: data.sessionId, tenantId, userId, status: 'OPEN' },
     });
     if (!session) throw new BadRequestException('An open POS session is required');
+    if (session.outletId !== order.outletId) {
+      throw new BadRequestException('Refund session must belong to the original sale outlet');
+    }
 
     // This operation restores every sold item and marks the order returned.
     // Therefore partial refunds are deliberately rejected instead of returning
