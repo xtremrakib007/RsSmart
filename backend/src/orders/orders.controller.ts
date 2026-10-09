@@ -5,6 +5,8 @@ import { CurrentUser } from '../common/decorators/user.decorator';
 import { CurrentOutlet } from '../common/decorators/outlet.decorator';
 import { OutletGuard } from '../common/guards/outlet.guard';
 import { Roles } from '../common/decorators/roles.decorator';
+import { RequirePermissions } from '../common/decorators/permissions.decorator';
+import { Permission } from '../common/permissions/permission.enum';
 
 @ApiTags('Orders')
 @ApiBearerAuth()
@@ -41,6 +43,7 @@ export class OrdersController {
   }
 
   @Post()
+  @RequirePermissions(Permission.SALES_CREATE)
   @UseGuards(OutletGuard)
   @ApiHeader({ name: 'x-outlet-id', required: false, description: "Which outlet this order belongs to; defaults to the user's default outlet" })
   @ApiOperation({ summary: 'Create order at an outlet' })
@@ -60,6 +63,7 @@ export class OrdersController {
   }
 
   @Post(':id/payments')
+  @RequirePermissions(Permission.SALES_CREATE)
   @ApiOperation({ summary: 'Add payment to order' })
   addPayment(@Param('id') id: string, @Body() data: any, @CurrentUser() user: any) {
     return this.ordersService.addPayment(id, user.tenantId, { ...data, createdBy: user.userId });
