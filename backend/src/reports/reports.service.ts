@@ -77,7 +77,7 @@ export class ReportsService {
   async inventoryReport(tenantId: string) {
     const inventory = await this.prisma.inventory.findMany({
       where: { tenantId },
-      include: { product: true },
+      include: { product: { select: { id: true, name: true, sku: true, categoryId: true, costPrice: true, basePrice: true, minStock: true } } },
     });
 
     const totalValue = inventory.reduce((sum, inv) => {
@@ -110,7 +110,7 @@ export class ReportsService {
 
     const payments = await this.prisma.payment.findMany({
       where,
-      include: { order: { include: { customer: true, salesRep: { omit: { password: true } } } } },
+      include: { order: { select: { id: true, orderNumber: true, customer: { select: { id: true, name: true } }, salesRep: { select: { id: true, firstName: true, lastName: true } } } } },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -133,14 +133,15 @@ export class ReportsService {
   async customerReport(tenantId: string) {
     const customers = await this.prisma.customer.findMany({
       where: { tenantId, isActive: true },
-      include: { orders: { include: { payments: true } } },
+      include: { orders: { where: { tenantId }, select: { total: true, paidAmount: true, balanceDue: true, createdAt: true, status: true }, orderBy: { createdAt: 'desc' } } },
     });
 
     const report = customers.map((customer) => {
-      const totalOrders = customer.orders.length;
-      const totalRevenue = customer.orders.reduce((sum, o) => sum + Number(o.total), 0);
-      const totalPaid = customer.orders.reduce((sum, o) => sum + Number(o.paidAmount), 0);
-      const balance = customer.orders.reduce((sum, o) => sum + Number(o.balanceDue), 0);
+      const saleOrders = customer.orders.filter((order) => order.status !== 'RETURNED');
+      const totalOrders = saleOrders.length;
+      const totalRevenue = saleOrders.reduce((sum, o) => sum + Number(o.total), 0);
+      const totalPaid = saleOrders.reduce((sum, o) => sum + Number(o.paidAmount), 0);
+      const balance = saleOrders.reduce((sum, o) => sum + Number(o.balanceDue), 0);
       const lastOrder = customer.orders[0]?.createdAt || null;
 
       return {
