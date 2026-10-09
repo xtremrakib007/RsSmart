@@ -274,3 +274,64 @@ describe('PosTransactionsService — Concurrent Stock Deduction (Phase 26)', () 
     );
   });
 });
+
+describe('PosTransactionsService — Checkout validation hardening', () => {
+  let service: PosTransactionsService;
+  let prisma: any;
+  const tenantId = 'tenant-1';
+  const userId = 'user-1';
+  const sessionId = 'session-1';
+  const productId = 'product-1';
+
+  beforeEach(() => {
+    prisma = {
+      posSession: { findFirst: jest.fn().mockResolvedValue({ id: sessionId, outletId: 'outlet-1', status: 'OPEN' }) },
+      customer: { findFirst: jest.fn().mockResolvedValue({ id: 'customer-1', isActive: true }), create: jest.fn() },
+      product: { findMany: jest.fn().mockResolvedValue([{ id: productId, name: 'Test', basePrice: 10, taxRate: 0, trackInventory: false }]) },
+      order: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn(), count: jest.fn() },
+      inventory: { findFirst: jest.fn() },
+      stockMovement: { create: jest.fn() },
+      payment: { create: jest.fn() },
+      posCashMovement: { create: jest.fn() },
+      $transaction: jest.fn(),
+    };
+    service = new PosTransactionsService({} as any);
+    (service as any).prisma = prisma;
+  });
+
+  const payload = (overrides: any = {}) => ({
+    sessionId,
+    items: [{ productId, quantity: 1, unitPrice: 0 }],
+    payments: [{ method: 'CASH', amount: 10 }],
+    ...overrides,
+  });
+
+  it('rejects client payloads that contain more than 100 items', async () => {
+    await expect(service.checkout(tenantId, userId, payload({
+      items: Array.from({ length: 101 }, () => ({ productId, quantity: 1 })),
+    }))).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.product.findMany).not.toHaveBeenCalled();
+  });
+
+  it('rejects discounts that exceed the catalog-priced subtotal', async () => {
+    await expect(service.checkout(tenantId, userId, payload({
+      items: [{ productId, quantity: 1, unitPrice: 0, discount: 10.01 }],
+    }))).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.order.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects payments greater than the server-calculated total', async () => {
+    await expect(service.checkout(tenantId, userId, payload({
+      payments: [{ method: 'CASH', amount: 10.01 }],
+    }))).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.order.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects non-boolean allowCredit values rather than treating strings as approval', async () => {
+    await expect(service.checkout(tenantId, userId, payload({
+      allowCredit: 'false',
+      payments: [],
+    }))).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.order.create).not.toHaveBeenCalled();
+  });
+});
