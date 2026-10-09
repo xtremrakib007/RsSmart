@@ -37,7 +37,7 @@ export class InventoryService {
   async getStockMovement(tenantId: string, outletId: string, productId: string) {
     return this.prisma.stockMovement.findMany({
       where: { tenantId, outletId, inventory: { productId } },
-      include: { inventory: { include: { product: { select: { id: true, sku: true, name: true, barcode: true } } } },
+      include: { inventory: { include: { product: { select: { id: true, sku: true, name: true, barcode: true } } } } },
       orderBy: { createdAt: 'desc' },
       take: 50,
     });
