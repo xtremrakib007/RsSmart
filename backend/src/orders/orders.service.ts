@@ -151,6 +151,13 @@ export class OrdersService {
   }
 
   async updateStatus(id: string, tenantId: string, status: string, approvedBy?: string) {
+    const allowedStatuses = new Set([
+      'DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'PROCESSING',
+      'SHIPPED', 'DELIVERED', 'CANCELLED', 'RETURNED',
+    ]);
+    if (!allowedStatuses.has(status)) {
+      throw new BadRequestException('Invalid order status');
+    }
     const updateData: any = { status };
     if (status === 'APPROVED') {
       updateData.approvedBy = approvedBy;
@@ -207,8 +214,17 @@ export class OrdersService {
 
   async addPayment(id: string, tenantId: string, data: any) {
     const amount = Number(data.amount);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      throw new BadRequestException('Payment amount must be a positive number');
+    if (!Number.isFinite(amount) || amount <= 0 || Math.round(amount * 100) !== amount * 100) {
+      throw new BadRequestException('Payment amount must be positive and have no more than two decimal places');
+    }
+    const allowedMethods = new Set([
+      'CASH', 'CARD', 'CHEQUE', 'BANK_TRANSFER', 'CREDIT', 'MOBILE_MONEY',
+    ]);
+    if (typeof data.method !== 'string' || !allowedMethods.has(data.method)) {
+      throw new BadRequestException('Invalid payment method');
+    }
+    if (typeof data.createdBy !== 'string' || !data.createdBy) {
+      throw new BadRequestException('Payment actor is required');
     }
 
     // Apply the balance check and increment in one database transaction. A
