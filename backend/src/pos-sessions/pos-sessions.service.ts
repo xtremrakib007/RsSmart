@@ -55,7 +55,7 @@ export class PosSessionsService {
     closingCash: number;
     closingDenominations?: Record<string, number>;
     forceClose?: boolean;
-  }) {
+  }, outletId?: string) {
     if (!Number.isFinite(data?.closingCash) || data.closingCash < 0 ||
         Math.round(data.closingCash * 100) / 100 !== data.closingCash) {
       throw new BadRequestException('Closing cash must be a non-negative amount with at most two decimal places');
@@ -77,11 +77,11 @@ export class PosSessionsService {
       // Lock the OPEN session row before reading movements. Cash movement
       // creation uses the same lock, so closing cannot omit a concurrent entry.
       const locked = await tx.posSession.updateMany({
-        where: { id: sessionId, tenantId, status: 'OPEN' },
+        where: { id: sessionId, tenantId, status: 'OPEN', ...(outletId ? { outletId } : {}) },
         data: { status: 'OPEN' },
       });
       if (locked.count !== 1) {
-        const exists = await tx.posSession.findFirst({ where: { id: sessionId, tenantId }, select: { id: true } });
+        const exists = await tx.posSession.findFirst({ where: { id: sessionId, tenantId, ...(outletId ? { outletId } : {}) }, select: { id: true } });
         if (!exists) throw new NotFoundException('Session not found');
         throw new BadRequestException('Session is already closed');
       }
@@ -117,9 +117,9 @@ export class PosSessionsService {
     });
   }
 
-  async getSessionReport(tenantId: string, sessionId: string) {
+  async getSessionReport(tenantId: string, sessionId: string, outletId?: string) {
     const session = await this.prisma.posSession.findFirst({
-      where: { id: sessionId, tenantId },
+      where: { id: sessionId, tenantId, ...(outletId ? { outletId } : {}) },
       include: { user: { omit: { password: true } } },
     });
     if (!session) throw new NotFoundException('Session not found');
@@ -127,6 +127,7 @@ export class PosSessionsService {
     const orders = await this.prisma.order.findMany({
       where: {
         tenantId,
+        outletId: session.outletId,
         salesRepId: session.userId,
         createdAt: { gte: session.openedAt },
         source: 'POS',
