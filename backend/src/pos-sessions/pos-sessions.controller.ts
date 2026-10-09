@@ -40,8 +40,9 @@ export class PosSessionsController {
     @Param('id') id: string,
     @Body() data: { closingCash: number; closingDenominations?: Record<string, number>; forceClose?: boolean },
     @CurrentUser() user: any,
+    @CurrentOutlet() outlet: any,
   ) {
-    return this.posSessionsService.closeSession(user.tenantId, id, data);
+    return this.posSessionsService.closeSession(user.tenantId, id, data, outlet.id);
   }
 
   @Get(':id/report')
