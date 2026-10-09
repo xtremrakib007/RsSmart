@@ -75,7 +75,13 @@ export class OrdersService {
       include: {
         customer: true,
         salesRep: { omit: { password: true } },
-        items: { include: { product: true } },
+        items: {
+          include: {
+            product: {
+              select: { id: true, sku: true, name: true, barcode: true, basePrice: true, taxRate: true },
+            },
+          },
+        },
         payments: true,
       },
     });
@@ -156,6 +162,13 @@ export class OrdersService {
       throw new BadRequestException('Order discount must be non-negative and cannot exceed the remaining order total');
     }
     const total = money(preOrderDiscountTotal - orderDiscount);
+    let deliveryDate: Date | undefined;
+    if (data.deliveryDate !== undefined && data.deliveryDate !== null && data.deliveryDate !== '') {
+      deliveryDate = new Date(data.deliveryDate);
+      if (Number.isNaN(deliveryDate.getTime())) {
+        throw new BadRequestException('Invalid deliveryDate');
+      }
+    }
     const orderNumber = await this.generateOrderNumber(tenantId);
 
     return this.prisma.order.create({
@@ -172,7 +185,7 @@ export class OrdersService {
         total,
         balanceDue: total,
         notes: typeof data.notes === 'string' ? data.notes.slice(0, 2000) : undefined,
-        deliveryDate: data.deliveryDate ? new Date(data.deliveryDate) : undefined,
+        deliveryDate,
         items: {
           create: items,
         },
