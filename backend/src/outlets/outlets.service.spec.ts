@@ -58,7 +58,6 @@ describe('OutletsService', () => {
         service.update(tenantId, 'actor-1', 'outlet-a', { status: 'INACTIVE' as any }),
       ).rejects.toThrow(BadRequestException);
     });
-  });
 
     it('updates only an outlet belonging to the current tenant', async () => {
       const outlet = { id: 'outlet-a', tenantId, isDefault: false, name: 'Old' };
