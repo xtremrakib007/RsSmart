@@ -37,5 +37,12 @@ export const WILDCARD_PERMISSION = '*';
 
 export function hasPermission(userPermissions: string[] | undefined, required: Permission): boolean {
   if (!userPermissions || userPermissions.length === 0) return false;
-  return userPermissions.includes(WILDCARD_PERMISSION) || userPermissions.includes(required);
+  if (userPermissions.includes(WILDCARD_PERMISSION) || userPermissions.includes(required)) return true;
+  const requiredNamespace = required.split('.')[0];
+  return userPermissions.some((grant) =>
+    typeof grant === 'string' &&
+    grant.endsWith('.*') &&
+    grant.slice(0, -2) === requiredNamespace &&
+    required.startsWith(requiredNamespace + '.'),
+  );
 }
