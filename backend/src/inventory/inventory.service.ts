@@ -80,12 +80,16 @@ export class InventoryService {
       let newQuantity = Number(inventory.quantity);
       if (data.type === 'INBOUND') newQuantity += data.quantity;
       else if (data.type === 'OUTBOUND') {
-        if (newQuantity < data.quantity) {
-          throw new BadRequestException('Insufficient stock for outbound movement');
+        const available = newQuantity - Number(inventory.reserved);
+        if (available < data.quantity) {
+          throw new BadRequestException('Insufficient unreserved stock for outbound movement');
         }
         newQuantity -= data.quantity;
       } else {
         newQuantity = data.quantity;
+        if (newQuantity < Number(inventory.reserved)) {
+          throw new BadRequestException('Adjusted quantity cannot be lower than reserved stock');
+        }
       }
 
       const updated = await tx.inventory.updateMany({
@@ -180,7 +184,7 @@ export class InventoryService {
     if (!Number.isFinite(data.quantity) || data.quantity <= 0) {
       throw new BadRequestException('Transfer quantity must be a positive finite number');
     }
-    if (data.fromWarehouseId && data.toWarehouseId && data.fromWarehouseId === data.toWarehouseId) {
+    if ((data.fromWarehouseId || null) === (data.toWarehouseId || null)) {
       throw new BadRequestException('Source and destination warehouses must be different');
     }
     if (data.notes !== undefined && (typeof data.notes !== 'string' || data.notes.length > 2000)) {
@@ -194,8 +198,8 @@ export class InventoryService {
       const fromInv = await tx.inventory.findFirst({
         where: { tenantId, outletId, productId: data.productId, warehouseId: data.fromWarehouseId || null },
       });
-      if (!fromInv || Number(fromInv.quantity) < data.quantity) {
-        throw new BadRequestException('Insufficient stock at source');
+      if (!fromInv || Number(fromInv.quantity) - Number(fromInv.reserved) < data.quantity) {
+        throw new BadRequestException('Insufficient unreserved stock at source');
       }
 
       const sourceUpdated = await tx.inventory.updateMany({
