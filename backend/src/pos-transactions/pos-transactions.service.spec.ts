@@ -103,6 +103,12 @@ describe('PosTransactionsService — Idempotency (Phase 25)', () => {
       expect(result.receiptNumber).toBe(existingOrder.orderNumber);
     });
 
+    it('rejects reuse of an idempotency key from another outlet', async () => {
+      prisma.order.findUnique.mockResolvedValue({ id: 'other-outlet-order', tenantId, outletId: 'outlet-2', orderNumber: 'POS-202408-00001' });
+      await expect(service.checkout(tenantId, userId, checkoutPayload, 'outlet-1')).rejects.toThrow('clientTransactionId is already used by a sale at another outlet');
+      expect(prisma.order.create).not.toHaveBeenCalled();
+    });
+
     it('should create a new order when clientTransactionId is new', async () => {
       prisma.order.findUnique.mockResolvedValue(null);
       prisma.order.create.mockResolvedValue({
