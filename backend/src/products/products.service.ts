@@ -43,6 +43,16 @@ export class ProductsService {
   }
 
   async create(tenantId: string, data: any) {
+    // Foreign keys must belong to this tenant; UUIDs are not authorization.
+    if (data.categoryId) {
+      const category = await this.prisma.category.findFirst({ where: { id: data.categoryId, tenantId } });
+      if (!category) throw new BadRequestException('Category not found for this company');
+    }
+    if (data.unitId) {
+      const unit = await this.prisma.unit.findFirst({ where: { id: data.unitId, tenantId } });
+      if (!unit) throw new BadRequestException('Unit not found for this company');
+    }
+
     const existing = await this.prisma.product.findUnique({
       where: { tenantId_sku: { tenantId, sku: data.sku } },
     });
@@ -56,9 +66,27 @@ export class ProductsService {
 
   async update(id: string, tenantId: string, data: any) {
     await this.findOne(id, tenantId);
+    // Never spread request bodies into Prisma updates: this prevents clients
+    // from changing tenantId or writing server-managed fields.
+    if (data.categoryId) {
+      const category = await this.prisma.category.findFirst({ where: { id: data.categoryId, tenantId } });
+      if (!category) throw new BadRequestException('Category not found for this company');
+    }
+    if (data.unitId) {
+      const unit = await this.prisma.unit.findFirst({ where: { id: data.unitId, tenantId } });
+      if (!unit) throw new BadRequestException('Unit not found for this company');
+    }
+    const allowed = [
+      'sku', 'name', 'description', 'barcode', 'categoryId', 'unitId',
+      'basePrice', 'costPrice', 'taxRate', 'isActive', 'trackInventory',
+      'minStock', 'maxStock', 'attributes', 'images',
+    ];
+    const safeData = Object.fromEntries(
+      allowed.filter((key) => Object.prototype.hasOwnProperty.call(data, key)).map((key) => [key, data[key]]),
+    );
     return this.prisma.product.update({
       where: { id },
-      data,
+      data: safeData,
       include: { category: true, unit: true },
     });
   }
