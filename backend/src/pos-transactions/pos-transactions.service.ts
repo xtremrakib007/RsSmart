@@ -17,17 +17,47 @@ export class PosTransactionsService {
     const products = await this.prisma.product.findMany({ where: { tenantId, id: { in: ids }, isActive: true } });
     if (products.length !== new Set(ids).size) throw new BadRequestException('One or more products are invalid or inactive');
     const map = new Map(products.map(p => [p.id, p]));
+    const money = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
     const items = data.items.map((x: any) => {
-      const p: any = map.get(x.productId); const quantity = Number(x.quantity);
-      if (!Number.isFinite(quantity) || quantity <= 0) throw new BadRequestException('Invalid quantity');
-      const unitPrice = x.unitPrice == null ? Number(p.basePrice) : Number(x.unitPrice);
-      const discount = Math.max(0, Number(x.discount || 0)); const taxable = Math.max(0, quantity * unitPrice - discount); const taxRate = Number(p.taxRate || 0); const taxAmount = taxable * taxRate / 100;
-      return { p, quantity, unitPrice, discount, taxRate, taxAmount, total: taxable + taxAmount };
+      const p: any = map.get(x.productId);
+      if (!p) throw new BadRequestException('Every item must reference an active product');
+      const quantity = Number(x.quantity);
+      const unitPrice = Number(p.basePrice);
+      const discount = Number(x.discount ?? 0);
+      const taxRate = Number(p.taxRate ?? 0);
+      if (!Number.isFinite(quantity) || quantity <= 0 ||
+          !Number.isFinite(unitPrice) || unitPrice < 0 ||
+          !Number.isFinite(discount) || discount < 0 ||
+          !Number.isFinite(taxRate) || taxRate < 0 || taxRate > 100) {
+        throw new BadRequestException('Invalid quantity, price, discount, or tax rate');
+      }
+      const lineSubtotal = money(quantity * unitPrice);
+      if (discount > lineSubtotal) throw new BadRequestException('Item discount cannot exceed its subtotal');
+      const taxable = money(lineSubtotal - discount);
+      const taxAmount = money(taxable * taxRate / 100);
+      return { p, quantity, unitPrice, discount: money(discount), taxRate, taxAmount, total: money(taxable + taxAmount) };
     });
-    const subtotal = items.reduce((s,i)=>s+i.quantity*i.unitPrice,0); const lineDiscount = items.reduce((s,i)=>s+i.discount,0); const discount = lineDiscount + Math.max(0, Number(data.discount||0)); const taxAmount = items.reduce((s,i)=>s+i.taxAmount,0); const total = Math.max(0, subtotal - discount + taxAmount);
-    const payments = Array.isArray(data.payments) ? data.payments : []; const paid = payments.reduce((s:number,p:any)=>s+Number(p.amount||0),0);
-    if (payments.some((p:any)=>!METHODS.includes(p.method))) throw new BadRequestException('Unsupported payment method');
-    if (paid + 0.0001 < total && !data.allowCredit) throw new BadRequestException(`Payment is short by ${(total-paid).toFixed(2)}`);
+    const subtotal = money(items.reduce((s, i) => s + i.quantity * i.unitPrice, 0));
+    const lineDiscount = money(items.reduce((s, i) => s + i.discount, 0));
+    const orderDiscount = Number(data.discount ?? 0);
+    const taxAmount = money(items.reduce((s, i) => s + i.taxAmount, 0));
+    const beforeOrderDiscount = money(subtotal - lineDiscount + taxAmount);
+    if (!Number.isFinite(orderDiscount) || orderDiscount < 0 || orderDiscount > beforeOrderDiscount) {
+      throw new BadRequestException('Order discount must be non-negative and cannot exceed the remaining total');
+    }
+    const discount = money(lineDiscount + orderDiscount);
+    const total = money(beforeOrderDiscount - orderDiscount);
+    const payments = Array.isArray(data.payments) ? data.payments : [];
+    if (payments.some((p: any) => !p || !METHODS.includes(p.method))) throw new BadRequestException('Unsupported payment method');
+    const paid = money(payments.reduce((sum: number, p: any) => {
+      const amount = Number(p.amount);
+      if (!Number.isFinite(amount) || amount <= 0 || Math.round(amount * 100) / 100 !== amount) {
+        throw new BadRequestException('Payment amounts must be positive and have at most two decimal places');
+      }
+      return sum + amount;
+    }, 0));
+    if (paid > total) throw new BadRequestException('Payments cannot exceed the order total');
+    if (paid + 0.0001 < total && !data.allowCredit) throw new BadRequestException(`Payment is short by ${(total - paid).toFixed(2)}`);
     // Phase 25: idempotency fast path — 99 % of retries hit this and return immediately.
     if (data.clientTransactionId) {
       const existing = await this.prisma.order.findUnique({
