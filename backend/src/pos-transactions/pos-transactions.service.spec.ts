@@ -347,7 +347,7 @@ describe('PosTransactionsService — Refund safety', () => {
   const order = {
     id: orderId, tenantId, source: 'POS', status: 'APPROVED', outletId: 'outlet-1',
     orderNumber: 'POS-202610-00001', paidAmount: 20,
-    items: [{ productId: 'product-1', quantity: 2 }],
+    items: [{ productId: 'product-1', quantity: 2, product: { trackInventory: true } }],
   };
 
   beforeEach(() => {
@@ -358,7 +358,7 @@ describe('PosTransactionsService — Refund safety', () => {
       },
       posSession: { findFirst: jest.fn().mockResolvedValue({ id: sessionId, outletId: 'outlet-1' }) },
       inventory: { findFirst: jest.fn().mockResolvedValue({ id: 'inventory-1' }), update: jest.fn() },
-      stockMovement: { create: jest.fn() },
+      stockMovement: { findFirst: jest.fn().mockResolvedValue({ inventoryId: 'inventory-1' }), create: jest.fn() },
       payment: { create: jest.fn() },
       posCashMovement: { create: jest.fn() },
       $transaction: jest.fn((fn: any) => fn(prisma)),
@@ -388,6 +388,39 @@ describe('PosTransactionsService — Refund safety', () => {
     expect(prisma.inventory.update).not.toHaveBeenCalled();
     expect(prisma.stockMovement.create).not.toHaveBeenCalled();
     expect(prisma.payment.create).not.toHaveBeenCalled();
+  });
+
+  it('restores tracked stock to the inventory row used by the original sale', async () => {
+    prisma.order.findFirst.mockResolvedValue({
+      ...order,
+      items: [{ productId: 'product-1', quantity: 2, product: { trackInventory: true } }],
+    });
+    prisma.stockMovement.findFirst.mockResolvedValue({ inventoryId: 'inventory-original-sale' });
+    prisma.inventory.findFirst.mockResolvedValue({ id: 'inventory-original-sale' });
+
+    await service.refund(tenantId, userId, orderId, { sessionId, warehouseId: 'attacker-selected-warehouse' });
+
+    expect(prisma.stockMovement.findFirst).toHaveBeenCalledWith({
+      where: {
+        tenantId, referenceId: orderId, referenceType: 'POS_ORDER',
+        inventory: { productId: 'product-1' },
+      },
+      select: { inventoryId: true },
+    });
+    expect(prisma.inventory.findFirst).toHaveBeenCalledWith({
+      where: { id: 'inventory-original-sale', tenantId, outletId: 'outlet-1', productId: 'product-1' },
+    });
+    expect(prisma.inventory.update).toHaveBeenCalledWith({
+      where: { id: 'inventory-original-sale' },
+      data: { quantity: { increment: 2 }, version: { increment: 1 } },
+    });
+  });
+
+  it('rejects refunds for orders that are not completed POS sales', async () => {
+    prisma.order.findFirst.mockResolvedValue({ ...order, status: 'CANCELLED' });
+    await expect(service.refund(tenantId, userId, orderId, { sessionId }))
+      .rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 });
 
