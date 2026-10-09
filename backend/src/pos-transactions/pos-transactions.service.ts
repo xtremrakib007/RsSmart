@@ -80,7 +80,12 @@ export class PosTransactionsService {
       const existing = await this.prisma.order.findUnique({
         where: { tenantId_clientTransactionId: { tenantId, clientTransactionId: data.clientTransactionId } },
       });
-      if (existing) return this.getReceipt(tenantId, existing.id);
+      if (existing) {
+        if (existing.outletId !== session.outletId) {
+          throw new BadRequestException('clientTransactionId is already used by a sale at another outlet');
+        }
+        return this.getReceipt(tenantId, existing.id, session.outletId);
+      }
     }
 
     // Phase 25: race-condition safety — if two requests with the same
@@ -129,7 +134,12 @@ export class PosTransactionsService {
         const existing = await this.prisma.order.findUnique({
           where: { tenantId_clientTransactionId: { tenantId, clientTransactionId: data.clientTransactionId } },
         });
-        if (existing) return this.getReceipt(tenantId, existing.id);
+        if (existing) {
+          if (existing.outletId !== session.outletId) {
+            throw new BadRequestException('clientTransactionId is already used by a sale at another outlet');
+          }
+          return this.getReceipt(tenantId, existing.id, session.outletId);
+        }
       }
       throw error;
     }
