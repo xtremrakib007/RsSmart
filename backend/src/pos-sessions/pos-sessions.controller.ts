@@ -63,10 +63,10 @@ export class PosSessionsController {
   @ApiQuery({ name: 'toDate', required: false })
   getSessions(
     @CurrentUser() user: any,
-    @Query('userId') userId?: string,
-    @Query('outletId') outletId?: string,
-    @Query('fromDate') fromDate?: string,
-    @Query('toDate') toDate?: string,
+    @Query('userId') userId: string | undefined,
+    @Query('outletId') outletId: string | undefined,
+    @Query('fromDate') fromDate: string | undefined,
+    @Query('toDate') toDate: string | undefined,
     @CurrentOutlet() outlet: any,
   ) {
     return this.posSessionsService.getSessions(user.tenantId, { userId, outletId: outlet.id, fromDate, toDate });
