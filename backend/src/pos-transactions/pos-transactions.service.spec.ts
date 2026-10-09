@@ -335,3 +335,58 @@ describe('PosTransactionsService — Checkout validation hardening', () => {
     expect(prisma.order.create).not.toHaveBeenCalled();
   });
 });
+
+
+describe('PosTransactionsService — Refund safety', () => {
+  let service: PosTransactionsService;
+  let prisma: any;
+  const tenantId = 'tenant-1';
+  const userId = 'user-1';
+  const orderId = 'order-1';
+  const sessionId = 'session-1';
+  const order = {
+    id: orderId, tenantId, source: 'POS', status: 'APPROVED', outletId: 'outlet-1',
+    orderNumber: 'POS-202610-00001', paidAmount: 20,
+    items: [{ productId: 'product-1', quantity: 2 }],
+  };
+
+  beforeEach(() => {
+    prisma = {
+      order: {
+        findFirst: jest.fn().mockResolvedValue(order),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+      posSession: { findFirst: jest.fn().mockResolvedValue({ id: sessionId, outletId: 'outlet-1' }) },
+      inventory: { findFirst: jest.fn().mockResolvedValue({ id: 'inventory-1' }), update: jest.fn() },
+      stockMovement: { create: jest.fn() },
+      payment: { create: jest.fn() },
+      posCashMovement: { create: jest.fn() },
+      $transaction: jest.fn((fn: any) => fn(prisma)),
+    };
+    service = new PosTransactionsService({} as any);
+    (service as any).prisma = prisma;
+  });
+
+  it('rejects partial refunds because this flow restores all items and closes the sale', async () => {
+    await expect(service.refund(tenantId, userId, orderId, { sessionId, amount: 10 }))
+      .rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(prisma.inventory.update).not.toHaveBeenCalled();
+    expect(prisma.payment.create).not.toHaveBeenCalled();
+  });
+
+  it.each([NaN, Infinity, 0, -1, 20.001])('rejects invalid refund amount %s', async amount => {
+    await expect(service.refund(tenantId, userId, orderId, { sessionId, amount }))
+      .rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('does not mutate inventory or create payment if another refund already claimed the order', async () => {
+    prisma.order.updateMany.mockResolvedValue({ count: 0 });
+    await expect(service.refund(tenantId, userId, orderId, { sessionId }))
+      .rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.inventory.update).not.toHaveBeenCalled();
+    expect(prisma.stockMovement.create).not.toHaveBeenCalled();
+    expect(prisma.payment.create).not.toHaveBeenCalled();
+  });
+});
