@@ -1,5 +1,22 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
+
+function parseDateRange(fromValue: string, toValue: string) {
+  if (typeof fromValue !== 'string' || typeof toValue !== 'string' || !fromValue.trim() || !toValue.trim()) {
+    throw new BadRequestException('fromDate and toDate are required');
+  }
+
+  const fromDate = new Date(fromValue);
+  const toDate = new Date(toValue);
+  if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) {
+    throw new BadRequestException('fromDate and toDate must be valid dates');
+  }
+  if (fromDate > toDate) {
+    throw new BadRequestException('fromDate must be before or equal to toDate');
+  }
+
+  return { gte: fromDate, lte: toDate };
+}
 
 @Injectable()
 export class ReportsService {
@@ -8,10 +25,7 @@ export class ReportsService {
   async salesReport(tenantId: string, filters: { fromDate: string; toDate: string; salesRepId?: string; customerId?: string }) {
     const where: any = {
       tenantId,
-      createdAt: {
-        gte: new Date(filters.fromDate),
-        lte: new Date(filters.toDate),
-      },
+      createdAt: parseDateRange(filters.fromDate, filters.toDate),
     };
     if (filters.salesRepId) where.salesRepId = filters.salesRepId;
     if (filters.customerId) where.customerId = filters.customerId;
@@ -91,10 +105,7 @@ export class ReportsService {
   async collectionReport(tenantId: string, filters: { fromDate: string; toDate: string; salesRepId?: string }) {
     const where: any = {
       order: { tenantId },
-      createdAt: {
-        gte: new Date(filters.fromDate),
-        lte: new Date(filters.toDate),
-      },
+      createdAt: parseDateRange(filters.fromDate, filters.toDate),
     };
 
     const payments = await this.prisma.payment.findMany({
