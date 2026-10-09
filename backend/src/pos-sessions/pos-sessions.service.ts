@@ -56,6 +56,23 @@ export class PosSessionsService {
     closingDenominations?: Record<string, number>;
     forceClose?: boolean;
   }) {
+    if (!Number.isFinite(data?.closingCash) || data.closingCash < 0 ||
+        Math.round(data.closingCash * 100) / 100 !== data.closingCash) {
+      throw new BadRequestException('Closing cash must be a non-negative amount with at most two decimal places');
+    }
+    if (data.forceClose !== undefined && typeof data.forceClose !== 'boolean') {
+      throw new BadRequestException('forceClose must be a boolean');
+    }
+    if (data.closingDenominations !== undefined) {
+      const denominations = data.closingDenominations;
+      if (!denominations || typeof denominations !== 'object' || Array.isArray(denominations) ||
+          Object.entries(denominations).length > 50 ||
+          Object.entries(denominations).some(([key, value]) =>
+            !key || key.length > 40 || typeof value !== 'number' ||
+            !Number.isSafeInteger(value) || value < 0)) {
+        throw new BadRequestException('Closing denominations must contain valid non-negative integer counts');
+      }
+    }
     const session = await this.prisma.posSession.findFirst({
       where: { id: sessionId, tenantId },
     });
