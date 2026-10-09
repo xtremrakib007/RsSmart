@@ -90,3 +90,58 @@ describe('ReportsService date filter validation', () => {
     expect(prisma.payment.findMany).not.toHaveBeenCalled();
   });
 });
+
+
+describe('ReportsService data minimization and customer tenant scope', () => {
+  it('selects limited related fields for sales reports', async () => {
+    const prisma: any = {
+      order: { findMany: jest.fn().mockResolvedValue([]) },
+    };
+    const service = new ReportsService(prisma);
+
+    await service.salesReport('tenant-1', {
+      fromDate: '2026-10-10T00:00:00.000Z',
+      toDate: '2026-10-10T23:59:59.999Z',
+    });
+
+    const query = prisma.order.findMany.mock.calls[0][0];
+    expect(query.where.tenantId).toBe('tenant-1');
+    expect(query.include.customer.select).toEqual({ id: true, name: true, category: true });
+    expect(query.include.salesRep.select).toEqual({ id: true, firstName: true, lastName: true });
+    expect(query.include.payments.select).toEqual({
+      id: true, amount: true, method: true, createdAt: true,
+    });
+  });
+
+  it('scopes nested orders to the tenant and excludes returned orders from customer totals', async () => {
+    const prisma: any = {
+      customer: {
+        findMany: jest.fn().mockResolvedValue([{
+          id: 'customer-1',
+          name: 'Example Customer',
+          category: 'Regular',
+          orders: [
+            { total: 100, paidAmount: 100, balanceDue: 0, status: 'APPROVED', createdAt: new Date('2026-10-10T10:00:00Z') },
+            { total: 50, paidAmount: 0, balanceDue: 0, status: 'RETURNED', createdAt: new Date('2026-10-10T11:00:00Z') },
+          ],
+        }]),
+      },
+    };
+    const service = new ReportsService(prisma);
+
+    const result = await service.customerReport('tenant-1');
+
+    const query = prisma.customer.findMany.mock.calls[0][0];
+    expect(query.where.tenantId).toBe('tenant-1');
+    expect(query.include.orders.where.tenantId).toBe('tenant-1');
+    expect(query.include.orders.select).toEqual({
+      total: true, paidAmount: true, balanceDue: true, createdAt: true, status: true,
+    });
+    expect(result.report[0]).toMatchObject({
+      totalOrders: 1,
+      totalRevenue: 100,
+      totalPaid: 100,
+      balance: 0,
+    });
+  });
+});
