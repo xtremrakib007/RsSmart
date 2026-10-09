@@ -85,6 +85,27 @@ describe('BillplzPaymentProvider', () => {
       await expect(provider.createCheckout(params)).rejects.toThrow(ServiceUnavailableException);
     });
 
+    it('rejects a configured API base URL outside the trusted Billplz hosts before sending credentials', async () => {
+      process.env.BILLPLZ_BASE_URL = 'https://attacker.example';
+
+      await expect(provider.createCheckout(params)).rejects.toThrow(ServiceUnavailableException);
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it('rejects an HTTP Billplz endpoint to prevent transmitting API credentials insecurely', async () => {
+      process.env.BILLPLZ_BASE_URL = 'http://www.billplz.com';
+
+      await expect(provider.createCheckout(params)).rejects.toThrow(ServiceUnavailableException);
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it('rejects a trusted Billplz hostname with an injected path or query string', async () => {
+      process.env.BILLPLZ_BASE_URL = 'https://www.billplz.com/proxy?to=attacker';
+
+      await expect(provider.createCheckout(params)).rejects.toThrow(ServiceUnavailableException);
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
     it('throws if BILLPLZ_API_KEY is not configured', async () => {
       delete process.env.BILLPLZ_API_KEY;
       await expect(provider.createCheckout(params)).rejects.toThrow(ServiceUnavailableException);
