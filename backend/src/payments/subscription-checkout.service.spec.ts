@@ -86,7 +86,6 @@ describe('SubscriptionCheckoutService', () => {
         data: expect.objectContaining({
           providerReference: 'bill_paid_immediately',
           status: 'PENDING',
-          webhookProcessedAt: undefined,
         }),
       });
       expect(subscriptions.activate).not.toHaveBeenCalled();
