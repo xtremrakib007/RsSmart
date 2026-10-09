@@ -10,9 +10,9 @@ describe('OutletsService', () => {
 
   beforeEach(() => {
     prisma = {
-      outlet: { findMany: jest.fn(), findFirst: jest.fn(), findUnique: jest.fn(), create: jest.fn(), update: jest.fn() },
+      outlet: { findMany: jest.fn(), findFirst: jest.fn(), findUnique: jest.fn(), create: jest.fn(), update: jest.fn(), updateMany: jest.fn() },
       user: { findFirst: jest.fn() },
-      userOutlet: { findMany: jest.fn(), findUnique: jest.fn(), upsert: jest.fn(), updateMany: jest.fn(), count: jest.fn(), delete: jest.fn() },
+      userOutlet: { findMany: jest.fn(), findUnique: jest.fn(), upsert: jest.fn(), updateMany: jest.fn(), count: jest.fn(), delete: jest.fn(), deleteMany: jest.fn() },
     };
     audit = { log: jest.fn() };
     service = new OutletsService(prisma, audit as any);
@@ -79,7 +79,7 @@ describe('OutletsService', () => {
       await service.assignUser(tenantId, 'actor-1', 'outlet-b', 'user-1', true);
 
       expect(prisma.userOutlet.updateMany).toHaveBeenCalledWith({
-        where: { userId: 'user-1', isDefault: true },
+        where: { tenantId, userId: 'user-1', isDefault: true },
         data: { isDefault: false },
       });
     });
