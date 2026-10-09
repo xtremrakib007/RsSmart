@@ -129,11 +129,87 @@ export class PosTransactionsService {
     }
   }
 
-  async refund(tenantId:string,userId:string,orderId:string,data:any){
-    const order=await this.prisma.order.findFirst({where:{id:orderId,tenantId,source:'POS'},include:{items:true,payments:true}}); if(!order) throw new NotFoundException('POS order not found'); if(order.status==='RETURNED') throw new BadRequestException('Order already refunded');
-    const session=await this.prisma.posSession.findFirst({where:{id:data.sessionId,tenantId,userId,status:'OPEN'}}); if(!session) throw new BadRequestException('An open POS session is required');
-    const amount=data.amount==null?Number(order.paidAmount):Number(data.amount); const method=data.method||'CASH'; if(amount<=0||amount>Number(order.paidAmount)) throw new BadRequestException('Invalid refund amount'); if(!METHODS.includes(method)) throw new BadRequestException('Unsupported refund method');
-    return this.prisma.$transaction(async tx=>{ for(const item of order.items){const inv=await tx.inventory.findFirst({where:{tenantId,outletId:order.outletId,productId:item.productId,warehouseId:data.warehouseId||null}}); if(!inv) throw new BadRequestException('Inventory not found for refund item at this outlet'); await tx.inventory.update({where:{id:inv.id},data:{quantity:{increment:item.quantity}}}); await tx.stockMovement.create({data:{tenantId,outletId:order.outletId,inventoryId:inv.id,type:'INBOUND',quantity:item.quantity,referenceId:order.id,referenceType:'POS_REFUND',createdBy:userId,notes:'POS refund'}});} await tx.order.update({where:{id:order.id},data:{status:'RETURNED',paidAmount:Math.max(0,Number(order.paidAmount)-amount),balanceDue:0}}); await tx.payment.create({data:{orderId:order.id,amount:-amount,method,reference:data.reference,notes:'POS refund',createdBy:userId}}); if(method==='CASH') await tx.posCashMovement.create({data:{tenantId,outletId:session.outletId,sessionId:session.id,type:'REFUND',amount,referenceId:order.id,notes:`Cash refund ${order.orderNumber}`,createdBy:userId}}); return this.getReceiptTx(tx,tenantId,order.id); });
+  async refund(tenantId: string, userId: string, orderId: string, data: any) {
+    if (!data || typeof data.sessionId !== 'string' || !data.sessionId) {
+      throw new BadRequestException('An open POS session is required');
+    }
+    if (data.method !== undefined && (typeof data.method !== 'string' || !METHODS.includes(data.method))) {
+      throw new BadRequestException('Unsupported refund method');
+    }
+    if (data.reference !== undefined && data.reference !== null &&
+        (typeof data.reference !== 'string' || data.reference.length > 200)) {
+      throw new BadRequestException('Refund reference must be at most 200 characters');
+    }
+
+    const order = await this.prisma.order.findFirst({
+      where: { id: orderId, tenantId, source: 'POS' },
+      include: { items: true },
+    });
+    if (!order) throw new NotFoundException('POS order not found');
+    if (order.status === 'RETURNED') throw new BadRequestException('Order already refunded');
+
+    const session = await this.prisma.posSession.findFirst({
+      where: { id: data.sessionId, tenantId, userId, status: 'OPEN' },
+    });
+    if (!session) throw new BadRequestException('An open POS session is required');
+
+    // This operation restores every sold item and marks the order returned.
+    // Therefore partial refunds are deliberately rejected instead of returning
+    // stock while retaining part of the sale as if it were still fulfilled.
+    const paidAmount = Number(order.paidAmount);
+    const amount = data.amount == null ? paidAmount : Number(data.amount);
+    if (!Number.isFinite(amount) || amount <= 0 ||
+        Math.round(amount * 100) / 100 !== amount ||
+        !Number.isFinite(paidAmount) || paidAmount <= 0 ||
+        Math.round((amount - paidAmount) * 100) / 100 !== 0) {
+      throw new BadRequestException('A refund must equal the full paid amount and use at most two decimal places');
+    }
+    const method = data.method || 'CASH';
+
+    return this.prisma.$transaction(async tx => {
+      // Claim the refund atomically. A concurrent duplicate refund loses this
+      // conditional update; throwing rolls back any stock/payment mutations.
+      const claimed = await tx.order.updateMany({
+        where: { id: order.id, tenantId, source: 'POS', status: { not: 'RETURNED' } },
+        data: { status: 'RETURNED', paidAmount: 0, balanceDue: 0 },
+      });
+      if (claimed.count !== 1) throw new BadRequestException('Order already refunded');
+
+      for (const item of order.items) {
+        const inv = await tx.inventory.findFirst({
+          where: { tenantId, outletId: order.outletId, productId: item.productId, warehouseId: data.warehouseId || null },
+        });
+        if (!inv) throw new BadRequestException('Inventory not found for refund item at this outlet');
+        await tx.inventory.update({
+          where: { id: inv.id },
+          data: { quantity: { increment: item.quantity }, version: { increment: 1 } },
+        });
+        await tx.stockMovement.create({
+          data: {
+            tenantId, outletId: order.outletId, inventoryId: inv.id,
+            type: 'INBOUND', quantity: item.quantity, referenceId: order.id,
+            referenceType: 'POS_REFUND', createdBy: userId, notes: 'POS refund',
+          },
+        });
+      }
+
+      await tx.payment.create({
+        data: {
+          orderId: order.id, amount: -amount, method,
+          reference: data.reference, notes: 'POS refund', createdBy: userId,
+        },
+      });
+      if (method === 'CASH') {
+        await tx.posCashMovement.create({
+          data: {
+            tenantId, outletId: session.outletId, sessionId: session.id,
+            type: 'REFUND', amount, referenceId: order.id,
+            notes: `Cash refund ${order.orderNumber}`, createdBy: userId,
+          },
+        });
+      }
+      return this.getReceiptTx(tx, tenantId, order.id);
+    });
   }
 
   async cashMovement(tenantId:string,userId:string,data:any){const type=data.type; const amount=Number(data.amount); if(!['IN','OUT'].includes(type)||!Number.isFinite(amount)||amount<=0) throw new BadRequestException('Valid type IN/OUT and positive amount required'); const session=await this.prisma.posSession.findFirst({where:{id:data.sessionId,tenantId,userId,status:'OPEN'}}); if(!session) throw new BadRequestException('Open POS session not found'); return this.prisma.posCashMovement.create({data:{tenantId,outletId:session.outletId,sessionId:session.id,type,amount,referenceId:data.referenceId,notes:data.notes,createdBy:userId}});}
