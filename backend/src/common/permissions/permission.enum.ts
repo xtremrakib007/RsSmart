@@ -39,10 +39,22 @@ export function hasPermission(userPermissions: string[] | undefined, required: P
   if (!userPermissions || userPermissions.length === 0) return false;
   if (userPermissions.includes(WILDCARD_PERMISSION) || userPermissions.includes(required)) return true;
   const requiredNamespace = required.split('.')[0];
-  return userPermissions.some((grant) =>
-    typeof grant === 'string' &&
-    grant.endsWith('.*') &&
-    grant.slice(0, -2) === requiredNamespace &&
-    required.startsWith(requiredNamespace + '.'),
-  );
+  // Backward-compatible aliases for permission names already present in seeded
+  // roles. Keep this explicit; never infer broad grants across unrelated areas.
+  const legacyNamespaces: Record<string, string[]> = {
+    sales: ['orders'],
+  };
+  const acceptedNamespaces = [requiredNamespace, ...(legacyNamespaces[requiredNamespace] ?? [])];
+  const requiredAction = required.split('.')[1];
+
+  return userPermissions.some((grant) => {
+    if (typeof grant !== 'string') return false;
+    if (grant.endsWith('.*')) {
+      return acceptedNamespaces.includes(grant.slice(0, -2));
+    }
+    const [grantNamespace, grantAction] = grant.split('.');
+    return acceptedNamespaces.includes(grantNamespace) &&
+      grantAction === requiredAction &&
+      grant.split('.').length === 2;
+  });
 }
