@@ -73,8 +73,8 @@ export class OrdersService {
     const order = await this.prisma.order.findFirst({
       where: { id, tenantId },
       include: {
-        customer: true,
-        salesRep: { omit: { password: true } },
+        customer: { select: { id: true, code: true, name: true, email: true, phone: true } },
+        salesRep: { select: { id: true, firstName: true, lastName: true } },
         items: {
           include: {
             product: {
@@ -82,7 +82,7 @@ export class OrdersService {
             },
           },
         },
-        payments: true,
+        payments: { select: { id: true, amount: true, method: true, reference: true, createdAt: true } },
       },
     });
     if (!order) throw new NotFoundException('Order not found');
