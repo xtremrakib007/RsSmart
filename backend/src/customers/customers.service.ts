@@ -32,8 +32,18 @@ export class CustomersService {
   }
 
   async create(tenantId: string, data: any) {
+    const allowed = [
+      'code', 'name', 'email', 'phone', 'address', 'city', 'state',
+      'country', 'latitude', 'longitude', 'creditLimit', 'category',
+    ];
+    const safeData = Object.fromEntries(
+      allowed.filter((key) => Object.prototype.hasOwnProperty.call(data, key)).map((key) => [key, data[key]]),
+    );
+    if (typeof safeData.name !== 'string' || !safeData.name.trim()) {
+      throw new BadRequestException('Customer name is required');
+    }
     return this.prisma.customer.create({
-      data: { ...data, tenantId },
+      data: { ...safeData, tenantId },
     });
   }
 
