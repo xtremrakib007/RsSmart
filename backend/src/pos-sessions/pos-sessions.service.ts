@@ -86,12 +86,12 @@ export class PosSessionsService {
         throw new BadRequestException('Session is already closed');
       }
       const session = await tx.posSession.findFirst({
-        where: { id: sessionId, tenantId, status: 'OPEN' },
+        where: { id: sessionId, tenantId, status: 'OPEN', ...(outletId ? { outletId } : {}) },
       });
       if (!session) throw new BadRequestException('Session is already closed');
 
       const movements = await tx.posCashMovement.findMany({
-        where: { tenantId, sessionId: session.id },
+        where: { tenantId, outletId: session.outletId, sessionId: session.id },
       });
       let expectedCash = Number(session.openingCash);
       for (const movement of movements) {
