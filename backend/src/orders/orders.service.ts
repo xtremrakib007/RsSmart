@@ -62,10 +62,10 @@ export class OrdersService {
     if (!customer) throw new BadRequestException('Customer not found for this company');
     if (!salesRep) throw new BadRequestException('Sales user is not active in this company');
 
-    const productIds = [...new Set(data.items.map((item: any) => item.productId).filter(Boolean))];
-    if (productIds.length !== data.items.length) {
+    if (data.items.some((item: any) => typeof item?.productId !== 'string' || !item.productId)) {
       throw new BadRequestException('Every order item must reference a product');
     }
+    const productIds = [...new Set(data.items.map((item: any) => item.productId))];
     const products = await this.prisma.product.findMany({
       where: { tenantId, id: { in: productIds }, isActive: true },
       select: { id: true },
@@ -83,8 +83,19 @@ export class OrdersService {
       const itemTotal = itemSubtotal + itemTax - (item.discount || 0);
       subtotal += itemSubtotal;
       taxAmount += itemTax;
+      if (!Number.isFinite(Number(item.quantity)) || Number(item.quantity) <= 0 ||
+          !Number.isFinite(Number(item.unitPrice)) || Number(item.unitPrice) < 0 ||
+          !Number.isFinite(Number(item.taxRate || 0)) || Number(item.taxRate || 0) < 0 ||
+          !Number.isFinite(Number(item.discount || 0)) || Number(item.discount || 0) < 0) {
+        throw new BadRequestException('Order item quantity, price, tax, or discount is invalid');
+      }
       return {
-        ...item,
+        productId: item.productId,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        taxRate: item.taxRate || 0,
+        discount: item.discount || 0,
+        ...(item.notes !== undefined ? { notes: item.notes } : {}),
         taxAmount: itemTax,
         total: itemTotal,
       };
