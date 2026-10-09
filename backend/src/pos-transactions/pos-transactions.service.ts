@@ -8,12 +8,24 @@ export class PosTransactionsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async checkout(tenantId: string, userId: string, data: any) {
-    if (!data?.sessionId || !Array.isArray(data.items) || !data.items.length) throw new BadRequestException('sessionId and items are required');
+    if (!data?.sessionId || typeof data.sessionId !== 'string' || !Array.isArray(data.items) || !data.items.length) {
+      throw new BadRequestException('sessionId and items are required');
+    }
+    if (data.items.length > 100) throw new BadRequestException('A POS sale cannot contain more than 100 items');
+    if (data.allowCredit !== undefined && typeof data.allowCredit !== 'boolean') {
+      throw new BadRequestException('allowCredit must be a boolean');
+    }
+    if (data.notes !== undefined && data.notes !== null && typeof data.notes !== 'string') {
+      throw new BadRequestException('Order notes must be text');
+    }
     const session = await this.prisma.posSession.findFirst({ where: { id: data.sessionId, tenantId, userId, status: 'OPEN' } });
     if (!session) throw new BadRequestException('An open POS session is required');
     const customer = data.customerId ? await this.prisma.customer.findFirst({ where: { id: data.customerId, tenantId, isActive: true } }) : await this.getWalkInCustomer(tenantId);
     if (!customer) throw new NotFoundException('Customer not found');
-    const ids = data.items.map((x: any) => x.productId).filter(Boolean);
+    if (data.items.some((item: any) => !item || typeof item.productId !== 'string' || !item.productId)) {
+      throw new BadRequestException('Every item must reference a product');
+    }
+    const ids = data.items.map((x: any) => x.productId);
     const products = await this.prisma.product.findMany({ where: { tenantId, id: { in: ids }, isActive: true } });
     if (products.length !== new Set(ids).size) throw new BadRequestException('One or more products are invalid or inactive');
     const map = new Map(products.map(p => [p.id, p]));
