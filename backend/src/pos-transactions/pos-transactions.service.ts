@@ -176,10 +176,18 @@ export class PosTransactionsService {
     // Therefore partial refunds are deliberately rejected instead of returning
     // stock while retaining part of the sale as if it were still fulfilled.
     const paidAmount = Number(order.paidAmount);
+    const orderTotal = Number(order.total);
+    const balanceDue = Number(order.balanceDue);
+    // A full-return refund restores all stock and closes the sale. Do not
+    // silently write off an unpaid credit balance by zeroing it during refund.
+    if (!Number.isFinite(orderTotal) || orderTotal <= 0 ||
+        !Number.isFinite(balanceDue) || Math.round(balanceDue * 100) / 100 !== 0 ||
+        !Number.isFinite(paidAmount) || Math.round((paidAmount - orderTotal) * 100) / 100 !== 0) {
+      throw new BadRequestException('A full POS refund requires the sale to be fully paid with no outstanding balance');
+    }
     const amount = data.amount == null ? paidAmount : Number(data.amount);
     if (!Number.isFinite(amount) || amount <= 0 ||
         Math.round(amount * 100) / 100 !== amount ||
-        !Number.isFinite(paidAmount) || paidAmount <= 0 ||
         Math.round((amount - paidAmount) * 100) / 100 !== 0) {
       throw new BadRequestException('A refund must equal the full paid amount and use at most two decimal places');
     }
