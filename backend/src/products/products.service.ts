@@ -98,7 +98,7 @@ export class ProductsService {
       allowed.filter((key) => Object.prototype.hasOwnProperty.call(data, key)).map((key) => [key, data[key]]),
     );
     return this.prisma.product.update({
-      where: { id },
+      where: { id, tenantId },
       data: safeData,
       include: { category: true, unit: true },
     });
