@@ -192,7 +192,7 @@ export class OrdersService {
       },
       include: {
         customer: true,
-        items: { include: { product: true } },
+        items: { include: { product: { select: { id: true, sku: true, name: true, barcode: true, basePrice: true, taxRate: true } } } },
       },
     });
   }
@@ -213,7 +213,7 @@ export class OrdersService {
     const order = await this.prisma.order.update({
       where: { id, tenantId },
       data: updateData,
-      include: { customer: true, items: { include: { product: true } } },
+      include: { customer: true, items: { include: { product: { select: { id: true, sku: true, name: true, barcode: true, basePrice: true, taxRate: true } } } } },
     });
 
     // Sales order confirmation fires here — the moment an order is
