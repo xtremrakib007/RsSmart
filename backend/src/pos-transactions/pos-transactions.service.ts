@@ -89,6 +89,12 @@ export class PosTransactionsService {
     // instead of a 500.
     try {
       return await this.prisma.$transaction(async tx => {
+      // Serialize the sale transaction with session closure and manual cash entries.
+      const lockedSession = await tx.posSession.updateMany({
+        where: { id: data.sessionId, tenantId, userId, status: 'OPEN' },
+        data: { status: 'OPEN' },
+      });
+      if (lockedSession.count !== 1) throw new BadRequestException('POS session is no longer open');
       const orderNumber = await this.generateOrderNumber(tx, tenantId);
       const order = await tx.order.create({ data: { tenantId, outletId: session.outletId, orderNumber, customerId: customer.id, salesRepId: userId, source: 'POS', status: 'APPROVED', subtotal, taxAmount, discount, total, paidAmount: Math.min(paid,total), balanceDue: Math.max(0,total-paid), notes: typeof data.notes === 'string' ? data.notes.slice(0, 2000) : undefined, clientTransactionId: data.clientTransactionId || undefined, items: { create: items.map(i=>({ productId:i.p.id, quantity:i.quantity, unitPrice:i.unitPrice, discount:i.discount, taxRate:i.taxRate, taxAmount:i.taxAmount, total:i.total })) } } });
       for (const item of items) {
@@ -170,6 +176,18 @@ export class PosTransactionsService {
     const method = data.method || 'CASH';
 
     return this.prisma.$transaction(async tx => {
+      // Serialize refunds with closure of the cashier session.
+      const lockedSession = await tx.posSession.updateMany({
+        where: { id: data.sessionId, tenantId, userId, status: 'OPEN' },
+        data: { status: 'OPEN' },
+      });
+      if (lockedSession.count !== 1) throw new BadRequestException('POS session is no longer open');
+      const currentSession = await tx.posSession.findFirst({
+        where: { id: data.sessionId, tenantId, userId, status: 'OPEN' },
+      });
+      if (!currentSession || currentSession.outletId !== order.outletId) {
+        throw new BadRequestException('Refund session must be open at the original sale outlet');
+      }
       // Claim the refund atomically. A concurrent duplicate refund loses this
       // conditional update; throwing rolls back any stock/payment mutations.
       const claimed = await tx.order.updateMany({
