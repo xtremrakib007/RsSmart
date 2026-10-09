@@ -60,6 +60,20 @@ describe('OutletsService', () => {
     });
   });
 
+    it('updates only an outlet belonging to the current tenant', async () => {
+      const outlet = { id: 'outlet-a', tenantId, isDefault: false, name: 'Old' };
+      prisma.outlet.findFirst.mockResolvedValue(outlet);
+      prisma.outlet.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.update(tenantId, 'actor-1', 'outlet-a', { name: 'New' } as any);
+
+      expect(prisma.outlet.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: { id: 'outlet-a', tenantId },
+      }));
+      expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ tenantId, action: 'UPDATE' }));
+    });
+  });
+
   describe('assignUser', () => {
     it('rejects assigning a user who belongs to a different tenant', async () => {
       prisma.outlet.findFirst.mockResolvedValue({ id: 'outlet-a', tenantId });
