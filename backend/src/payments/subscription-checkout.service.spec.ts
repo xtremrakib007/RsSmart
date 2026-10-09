@@ -102,7 +102,7 @@ describe('SubscriptionCheckoutService', () => {
 
   describe('getCheckoutStatusForOwner', () => {
     it('scopes the lookup to the caller\'s own tenant', async () => {
-      prisma.subscriptionCheckout.findFirst.mockResolvedValue({ id: 'checkout-1', tenantId, providerReference: 'bill_abc' });
+      prisma.subscriptionCheckout.findFirst.mockResolvedValue({ id: 'checkout-1', tenantId, providerReference: 'bill_abc', amount: '99.00', currency: 'MYR' });
       payments.verifyPayment.mockResolvedValue({ status: 'SUCCEEDED', amount: { amount: 9900, currency: 'MYR' }, paidAt: new Date() });
 
       await service.getCheckoutStatusForOwner(tenantId, 'bill_abc');
@@ -120,7 +120,7 @@ describe('SubscriptionCheckoutService', () => {
     });
 
     it('re-queries the provider rather than trusting the locally stored status', async () => {
-      prisma.subscriptionCheckout.findFirst.mockResolvedValue({ id: 'checkout-1', tenantId, providerReference: 'bill_abc', status: 'PENDING' });
+      prisma.subscriptionCheckout.findFirst.mockResolvedValue({ id: 'checkout-1', tenantId, providerReference: 'bill_abc', status: 'PENDING', amount: '99.00', currency: 'MYR' });
       payments.verifyPayment.mockResolvedValue({ status: 'SUCCEEDED', amount: { amount: 9900, currency: 'MYR' }, paidAt: new Date() });
 
       const result = await service.getCheckoutStatusForOwner(tenantId, 'bill_abc');
@@ -129,8 +129,26 @@ describe('SubscriptionCheckoutService', () => {
       expect(result.status).toBe('SUCCEEDED');
     });
 
+    it('rejects provider success when the verified amount or currency differs from the stored checkout', async () => {
+      prisma.subscriptionCheckout.findFirst.mockResolvedValue({
+        id: 'checkout-1', tenantId, providerReference: 'bill_abc', amount: '99.00', currency: 'MYR',
+      });
+      payments.verifyPayment.mockResolvedValue({
+        status: 'SUCCEEDED', amount: { amount: 1, currency: 'USD' }, paidAt: new Date(),
+      });
+
+      await expect(service.getCheckoutStatusForOwner(tenantId, 'bill_abc'))
+        .rejects.toThrow('Verified payment amount or currency does not match checkout');
+      expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({
+        action: 'SUBSCRIPTION_CHECKOUT_STATUS_MISMATCH',
+        entityType: 'SubscriptionCheckout',
+        entityId: 'checkout-1',
+      }));
+      expect(subscriptions.activate).not.toHaveBeenCalled();
+    });
+
     it('never calls SubscriptionsService.activate — a redirect-facing read must not activate anything', async () => {
-      prisma.subscriptionCheckout.findFirst.mockResolvedValue({ id: 'checkout-1', tenantId, providerReference: 'bill_abc' });
+      prisma.subscriptionCheckout.findFirst.mockResolvedValue({ id: 'checkout-1', tenantId, providerReference: 'bill_abc', amount: '99.00', currency: 'MYR' });
       payments.verifyPayment.mockResolvedValue({ status: 'SUCCEEDED', amount: { amount: 9900, currency: 'MYR' }, paidAt: new Date() });
 
       await service.getCheckoutStatusForOwner(tenantId, 'bill_abc');
