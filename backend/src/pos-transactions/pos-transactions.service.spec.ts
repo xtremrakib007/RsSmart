@@ -42,7 +42,7 @@ describe('PosTransactionsService — Idempotency (Phase 25)', () => {
 
   beforeEach(async () => {
     prisma = {
-      posSession: { findFirst: jest.fn() },
+      posSession: { findFirst: jest.fn(), updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
       customer: { findFirst: jest.fn(), create: jest.fn() },
       product: { findMany: jest.fn() },
       order: {
@@ -188,7 +188,7 @@ describe('PosTransactionsService — Concurrent Stock Deduction (Phase 26)', () 
 
   beforeEach(async () => {
     prisma = {
-      posSession: { findFirst: jest.fn() },
+      posSession: { findFirst: jest.fn(), updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
       customer: { findFirst: jest.fn(), create: jest.fn() },
       product: { findMany: jest.fn() },
       order: {
@@ -285,7 +285,7 @@ describe('PosTransactionsService — Checkout validation hardening', () => {
 
   beforeEach(() => {
     prisma = {
-      posSession: { findFirst: jest.fn().mockResolvedValue({ id: sessionId, outletId: 'outlet-1', status: 'OPEN' }) },
+      posSession: { findFirst: jest.fn().mockResolvedValue({ id: sessionId, outletId: 'outlet-1', status: 'OPEN' }), updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
       customer: { findFirst: jest.fn().mockResolvedValue({ id: 'customer-1', isActive: true }), create: jest.fn() },
       product: { findMany: jest.fn().mockResolvedValue([{ id: productId, name: 'Test', basePrice: 10, taxRate: 0, trackInventory: false }]) },
       order: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn(), count: jest.fn() },
@@ -356,7 +356,7 @@ describe('PosTransactionsService — Refund safety', () => {
         findFirst: jest.fn().mockResolvedValue(order),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
-      posSession: { findFirst: jest.fn().mockResolvedValue({ id: sessionId, outletId: 'outlet-1' }) },
+      posSession: { findFirst: jest.fn().mockResolvedValue({ id: sessionId, outletId: 'outlet-1' }), updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
       inventory: { findFirst: jest.fn().mockResolvedValue({ id: 'inventory-1' }), update: jest.fn() },
       stockMovement: { findFirst: jest.fn().mockResolvedValue({ inventoryId: 'inventory-1' }), create: jest.fn() },
       payment: { create: jest.fn() },
@@ -433,7 +433,7 @@ describe('PosTransactionsService — Cash movement validation', () => {
 
   beforeEach(() => {
     prisma = {
-      posSession: { findFirst: jest.fn().mockResolvedValue({ id: sessionId, tenantId, userId, outletId: 'outlet-1', status: 'OPEN' }) },
+      posSession: { findFirst: jest.fn().mockResolvedValue({ id: sessionId, tenantId, userId, outletId: 'outlet-1', status: 'OPEN' }), updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
       posCashMovement: { create: jest.fn().mockResolvedValue({ id: 'movement-1' }) },
     };
     service = new PosTransactionsService({} as any);
