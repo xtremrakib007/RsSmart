@@ -210,6 +210,8 @@ describe('SubscriptionCheckoutService', () => {
         subscriptionId,
         providerReference: 'bill_abc',
         status: 'PENDING',
+        amount: '99.00',
+        currency: 'MYR',
         webhookProcessedAt: null,
       });
       payments.verifyPayment.mockResolvedValue({ status: 'SUCCEEDED', amount: { amount: 9900, currency: 'MYR' }, paidAt: new Date() });
@@ -232,6 +234,8 @@ describe('SubscriptionCheckoutService', () => {
         subscriptionId,
         providerReference: 'bill_abc',
         status: 'PENDING',
+        amount: '99.00',
+        currency: 'MYR',
         webhookProcessedAt: null,
       });
       payments.verifyPayment.mockResolvedValue({ status: 'SUCCEEDED', amount: { amount: 9900, currency: 'MYR' }, paidAt: new Date() });
