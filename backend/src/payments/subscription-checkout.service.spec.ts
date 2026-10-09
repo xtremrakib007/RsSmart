@@ -91,6 +91,28 @@ describe('SubscriptionCheckoutService', () => {
       expect(subscriptions.activate).not.toHaveBeenCalled();
     });
 
+    it('rejects invalid plan amounts before calling the payment provider', async () => {
+      subscriptions.getCurrent.mockResolvedValue({ id: subscriptionId, tenantId });
+      subscriptions.getCurrentPlan.mockResolvedValue({ id: 'plan-pro', name: 'Pro', priceMonthly: 'NaN', currency: 'MYR' });
+
+      await expect(
+        service.createCheckout(tenantId, 'user-1', subscriptionId, 'https://x/success', 'https://x/cancel'),
+      ).rejects.toThrow('Subscription plan has an invalid payment amount or currency');
+      expect(payments.createCheckout).not.toHaveBeenCalled();
+      expect(prisma.subscriptionCheckout.create).not.toHaveBeenCalled();
+    });
+
+    it('does not persist a provider checkout with an insecure redirect URL', async () => {
+      subscriptions.getCurrent.mockResolvedValue({ id: subscriptionId, tenantId });
+      subscriptions.getCurrentPlan.mockResolvedValue({ id: 'plan-pro', name: 'Pro', priceMonthly: '99.00', currency: 'MYR' });
+      payments.createCheckout.mockResolvedValue({ providerReference: 'bill_abc', checkoutUrl: 'http://untrusted.example/pay', status: 'PENDING' });
+
+      await expect(
+        service.createCheckout(tenantId, 'user-1', subscriptionId, 'https://x/success', 'https://x/cancel'),
+      ).rejects.toThrow('Payment provider returned an invalid checkout reference or URL');
+      expect(prisma.subscriptionCheckout.create).not.toHaveBeenCalled();
+    });
+
     it('rejects a subscriptionId that is not the caller tenant\'s current subscription', async () => {
       subscriptions.getCurrent.mockResolvedValue({ id: 'sub-other', tenantId });
 
