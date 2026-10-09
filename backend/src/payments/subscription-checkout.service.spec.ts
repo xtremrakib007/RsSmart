@@ -32,6 +32,7 @@ describe('SubscriptionCheckoutService', () => {
         findFirst: jest.fn(),
         findUnique: jest.fn(),
         update: jest.fn(),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
     };
     audit = { log: jest.fn() };
