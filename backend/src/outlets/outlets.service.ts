@@ -111,7 +111,7 @@ export class OutletsService {
 
     if (isDefault) {
       await this.prisma.userOutlet.updateMany({
-        where: { userId: targetUserId, isDefault: true },
+        where: { tenantId, userId: targetUserId, isDefault: true },
         data: { isDefault: false },
       });
     }
