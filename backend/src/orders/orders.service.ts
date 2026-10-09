@@ -214,7 +214,7 @@ export class OrdersService {
 
   async addPayment(id: string, tenantId: string, data: any) {
     const amount = Number(data.amount);
-    if (!Number.isFinite(amount) || amount <= 0 || Math.round(amount * 100) !== amount * 100) {
+    if (!Number.isFinite(amount) || amount <= 0 || Math.round(amount * 100) / 100 !== amount) {
       throw new BadRequestException('Payment amount must be positive and have no more than two decimal places');
     }
     const allowedMethods = new Set([
