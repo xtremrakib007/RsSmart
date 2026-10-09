@@ -34,6 +34,7 @@ export class PosSessionsController {
 
   @Put(':id/close')
   @RequirePermissions(Permission.POS_CLOSE)
+  @UseGuards(OutletGuard)
   @ApiOperation({ summary: 'Close POS session' })
   closeSession(
     @Param('id') id: string,
