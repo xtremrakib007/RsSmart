@@ -19,6 +19,7 @@ interface CheckoutRecord {
   currency: string;
   checkoutUrl: string;
   webhookProcessedAt: Date | null;
+  webhookProcessingAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -189,15 +190,54 @@ export class SubscriptionCheckoutService {
         throw new BadRequestException('Verified payment amount or currency does not match checkout');
       }
 
-      // Activate first. If activation fails, leave the checkout unprocessed so
-      // the provider can retry. Marking the webhook processed before activation
-      // would permanently suppress recovery after a transient database failure.
-      // Subscription activation is itself idempotent for already-ACTIVE rows.
-      await this.subscriptions.activate(checkout.tenantId, checkout.subscriptionId, SYSTEM_ACTOR);
-      await this.prisma.subscriptionCheckout.update({
-        where: { id: checkout.id },
-        data: { status: 'SUCCEEDED', webhookProcessedAt: new Date() },
+      // Atomically acquire a short lease so concurrent webhook deliveries
+      // cannot both activate the same checkout. A stale lease is reclaimable
+      // after a worker crash; activation is idempotent for an ACTIVE subscription.
+      const claimedAt = new Date();
+      const staleBefore = new Date(claimedAt.getTime() - 2 * 60 * 1000);
+      const claim = await this.prisma.subscriptionCheckout.updateMany({
+        where: {
+          id: checkout.id,
+          status: 'PENDING',
+          webhookProcessedAt: null,
+          OR: [
+            { webhookProcessingAt: null },
+            { webhookProcessingAt: { lt: staleBefore } },
+          ],
+        },
+        data: { webhookProcessingAt: claimedAt },
       });
+      if (claim.count !== 1) {
+        const latest: CheckoutRecord | null = await this.prisma.subscriptionCheckout.findUnique({
+          where: { id: checkout.id },
+        });
+        if (latest?.webhookProcessedAt) {
+          return { received: true, duplicate: true, status: latest.status };
+        }
+        // Another worker owns the lease. Acknowledge the delivery; the
+        // provider's own verification and stale-lease recovery handle retries.
+        return { received: true, processing: true, status: latest?.status ?? checkout.status };
+      }
+
+      try {
+        await this.subscriptions.activate(checkout.tenantId, checkout.subscriptionId, SYSTEM_ACTOR);
+        await this.prisma.subscriptionCheckout.update({
+          where: { id: checkout.id },
+          data: {
+            status: 'SUCCEEDED',
+            webhookProcessedAt: new Date(),
+            webhookProcessingAt: null,
+          },
+        });
+      } catch (error) {
+        // Leave it retryable immediately when the operation reports failure.
+        // If the process dies before this cleanup, the lease expires in 2 min.
+        await this.prisma.subscriptionCheckout.updateMany({
+          where: { id: checkout.id, webhookProcessingAt: claimedAt, webhookProcessedAt: null },
+          data: { webhookProcessingAt: null },
+        });
+        throw error;
+      }
       await this.audit.log({
         tenantId: checkout.tenantId,
         userId: undefined,
