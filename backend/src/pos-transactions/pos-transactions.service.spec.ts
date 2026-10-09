@@ -87,6 +87,7 @@ describe('PosTransactionsService — Idempotency (Phase 25)', () => {
       const existingOrder = {
         id: 'order-1',
         tenantId,
+        outletId: 'outlet-1',
         orderNumber: 'POS-202408-00001',
         source: 'POS',
       };
@@ -123,6 +124,7 @@ describe('PosTransactionsService — Idempotency (Phase 25)', () => {
         .mockResolvedValueOnce({
           id: 'order-race',
           tenantId,
+          outletId: 'outlet-1',
           orderNumber: 'POS-202408-00003',
         });
 
