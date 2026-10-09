@@ -37,6 +37,11 @@ describe('hasPermission', () => {
     expect(hasPermission(['orders.*'], Permission.PAYMENTS_COLLECT)).toBe(false);
   });
 
+  it('does not grant refund access to a sales-only role', () => {
+    expect(hasPermission(['sales.create'], Permission.PAYMENTS_REFUND)).toBe(false);
+    expect(hasPermission(['payments.collect'], Permission.PAYMENTS_REFUND)).toBe(false);
+  });
+
   it('preserves legacy users.write access to user-management actions', () => {
     expect(hasPermission(['users.write'], Permission.USERS_MANAGE)).toBe(true);
     expect(hasPermission(['users.read'], Permission.USERS_MANAGE)).toBe(false);
