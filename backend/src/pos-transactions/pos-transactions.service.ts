@@ -18,6 +18,10 @@ export class PosTransactionsService {
     if (data.notes !== undefined && data.notes !== null && typeof data.notes !== 'string') {
       throw new BadRequestException('Order notes must be text');
     }
+    if (data.clientTransactionId !== undefined &&
+        (typeof data.clientTransactionId !== 'string' || data.clientTransactionId.length < 1 || data.clientTransactionId.length > 200)) {
+      throw new BadRequestException('clientTransactionId must be between 1 and 200 characters');
+    }
     const session = await this.prisma.posSession.findFirst({ where: { id: data.sessionId, tenantId, userId, status: 'OPEN' } });
     if (!session) throw new BadRequestException('An open POS session is required');
     const customer = data.customerId ? await this.prisma.customer.findFirst({ where: { id: data.customerId, tenantId, isActive: true } }) : await this.getWalkInCustomer(tenantId);
@@ -60,6 +64,7 @@ export class PosTransactionsService {
     const discount = money(lineDiscount + orderDiscount);
     const total = money(beforeOrderDiscount - orderDiscount);
     const payments = Array.isArray(data.payments) ? data.payments : [];
+    if (payments.length > 20) throw new BadRequestException('A POS sale cannot contain more than 20 payments');
     if (payments.some((p: any) => !p || !METHODS.includes(p.method))) throw new BadRequestException('Unsupported payment method');
     const paid = money(payments.reduce((sum: number, p: any) => {
       const amount = Number(p.amount);
@@ -85,7 +90,7 @@ export class PosTransactionsService {
     try {
       return await this.prisma.$transaction(async tx => {
       const orderNumber = await this.generateOrderNumber(tx, tenantId);
-      const order = await tx.order.create({ data: { tenantId, outletId: session.outletId, orderNumber, customerId: customer.id, salesRepId: userId, source: 'POS', status: 'APPROVED', subtotal, taxAmount, discount, total, paidAmount: Math.min(paid,total), balanceDue: Math.max(0,total-paid), notes: data.notes, clientTransactionId: data.clientTransactionId || undefined, items: { create: items.map(i=>({ productId:i.p.id, quantity:i.quantity, unitPrice:i.unitPrice, discount:i.discount, taxRate:i.taxRate, taxAmount:i.taxAmount, total:i.total })) } } });
+      const order = await tx.order.create({ data: { tenantId, outletId: session.outletId, orderNumber, customerId: customer.id, salesRepId: userId, source: 'POS', status: 'APPROVED', subtotal, taxAmount, discount, total, paidAmount: Math.min(paid,total), balanceDue: Math.max(0,total-paid), notes: typeof data.notes === 'string' ? data.notes.slice(0, 2000) : undefined, clientTransactionId: data.clientTransactionId || undefined, items: { create: items.map(i=>({ productId:i.p.id, quantity:i.quantity, unitPrice:i.unitPrice, discount:i.discount, taxRate:i.taxRate, taxAmount:i.taxAmount, total:i.total })) } } });
       for (const item of items) {
         if (!item.p.trackInventory) continue;
         const inv = await tx.inventory.findFirst({ where: { tenantId, outletId: session.outletId, productId: item.p.id, warehouseId: data.warehouseId || null } });
