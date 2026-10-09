@@ -8,6 +8,7 @@ import { DEFAULT_ROLES } from '../common/permissions/default-roles';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { EntitlementsService } from '../entitlements/entitlements.service';
 import { PlanLimitExceededException } from '../common/exceptions/plan-limit.exception';
+import { getRequiredSignupPolicies } from '../legal-policies/policy-registry';
 
 // The plan every self-service signup is trialed onto. A slug (stable,
 // human-assigned in the seed data), not a raw plan id — ids are
@@ -116,7 +117,19 @@ export class AuthService {
     password: string;
     firstName: string;
     lastName: string;
+    acceptedPolicyKeys: string[];
   }) {
+    const requiredPolicies = getRequiredSignupPolicies();
+    const submittedKeys = new Set(data.acceptedPolicyKeys || []);
+    const missingPolicies = requiredPolicies.filter((policy) => !submittedKeys.has(policy.key));
+    const unknownKeys = [...submittedKeys].filter((key) => !requiredPolicies.some((policy) => policy.key === key));
+    if (missingPolicies.length || unknownKeys.length) {
+      throw new BadRequestException({
+        message: 'You must accept every current required policy to register a company',
+        missingPolicyKeys: missingPolicies.map((policy) => policy.key),
+        unknownPolicyKeys: unknownKeys,
+      });
+    }
     const slug = await this.generateUniqueSlug(data.companyName);
     const hashedPassword = await bcrypt.hash(data.password, 12);
 
@@ -159,6 +172,19 @@ export class AuthService {
           outlets: { create: [{ tenantId: tenant.id, outletId: outlet.id, isDefault: true }] },
         },
         include: { roles: { include: { role: true } } },
+      });
+
+      await tx.policyAcceptance.createMany({
+        data: requiredPolicies.map((policy) => ({
+          tenantId: tenant.id,
+          userId: owner.id,
+          policyKey: policy.key,
+          policyTitle: policy.title,
+          policyVersion: policy.version,
+          contentHash: policy.contentHash,
+          action: 'ACCEPTED',
+          flow: 'COMPANY_REGISTRATION',
+        })),
       });
 
       return { tenant, outlet, owner };
