@@ -23,6 +23,7 @@
     "prisma:studio": "prisma studio",
     "prisma:seed": "ts-node prisma/seed.ts",
     "validate:env": "node scripts/validate-env.mjs",
+    "test:env": "node --test scripts/validate-env.test.mjs",
     "verify:production": "node scripts/verify-production-readiness.mjs"
   },
   "dependencies": {
