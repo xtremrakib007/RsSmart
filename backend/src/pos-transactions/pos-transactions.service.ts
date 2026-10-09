@@ -267,7 +267,7 @@ export class PosTransactionsService {
     // inside the same transaction that records the movement.
     return this.prisma.$transaction(async (tx: any) => {
       const locked = await tx.posSession.updateMany({
-        where: { id: data.sessionId, tenantId, userId, status: 'OPEN' },
+        where: { id: data.sessionId, tenantId, userId, status: 'OPEN', ...(outletId ? { outletId } : {}) },
         data: { status: 'OPEN' },
       });
       if (locked.count !== 1) throw new BadRequestException('Open POS session not found');
