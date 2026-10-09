@@ -18,6 +18,7 @@ export enum Permission {
   SALES_CREATE = 'sales.create',
 
   PAYMENTS_COLLECT = 'payments.collect',
+  PAYMENTS_REFUND = 'payments.refund',
 
   POS_OPEN = 'pos.open',
   POS_CLOSE = 'pos.close',
