@@ -74,8 +74,9 @@ export class PosSessionsService {
 
     const discrepancy = data.closingCash - expectedCash;
 
-    return this.prisma.posSession.update({
-      where: { id: sessionId },
+    // Conditional update makes closing a one-winner operation if two requests race.
+    const closed = await this.prisma.posSession.updateMany({
+      where: { id: sessionId, tenantId, status: 'OPEN' },
       data: {
         status: data.forceClose ? 'FORCE_CLOSED' : 'CLOSED',
         closedAt: new Date(),
@@ -85,6 +86,8 @@ export class PosSessionsService {
         discrepancy,
       },
     });
+    if (closed.count !== 1) throw new BadRequestException('Session is already closed');
+    return this.prisma.posSession.findFirst({ where: { id: sessionId, tenantId } });
   }
 
   async getSessionReport(tenantId: string, sessionId: string) {
@@ -101,7 +104,17 @@ export class PosSessionsService {
         createdAt: { gte: session.openedAt },
         source: 'POS',
       },
-      include: { items: { include: { product: true } }, payments: true, customer: true },
+      include: {
+        items: {
+          select: {
+            id: true, productId: true, quantity: true, unitPrice: true,
+            discount: true, taxRate: true, taxAmount: true, total: true,
+            product: { select: { id: true, sku: true, name: true, barcode: true, basePrice: true, taxRate: true } },
+          },
+        },
+        payments: { select: { id: true, amount: true, method: true, reference: true, createdAt: true } },
+        customer: { select: { id: true, name: true, phone: true, email: true } },
+      },
     });
 
     const paymentSummary: Record<string, number> = {};
