@@ -215,7 +215,36 @@ export class PosTransactionsService {
     });
   }
 
-  async cashMovement(tenantId:string,userId:string,data:any){const type=data.type; const amount=Number(data.amount); if(!['IN','OUT'].includes(type)||!Number.isFinite(amount)||amount<=0) throw new BadRequestException('Valid type IN/OUT and positive amount required'); const session=await this.prisma.posSession.findFirst({where:{id:data.sessionId,tenantId,userId,status:'OPEN'}}); if(!session) throw new BadRequestException('Open POS session not found'); return this.prisma.posCashMovement.create({data:{tenantId,outletId:session.outletId,sessionId:session.id,type,amount,referenceId:data.referenceId,notes:data.notes,createdBy:userId}});}
+  async cashMovement(tenantId: string, userId: string, data: any) {
+    const type = data?.type;
+    const amount = Number(data?.amount);
+    if (typeof data?.sessionId !== 'string' || !data.sessionId ||
+        !['IN', 'OUT'].includes(type) ||
+        !Number.isFinite(amount) || amount <= 0 ||
+        Math.round(amount * 100) / 100 !== amount) {
+      throw new BadRequestException('Valid session, type IN/OUT, and positive amount with at most two decimals are required');
+    }
+    if (data.referenceId !== undefined && data.referenceId !== null &&
+        (typeof data.referenceId !== 'string' || data.referenceId.length > 200)) {
+      throw new BadRequestException('Reference must be at most 200 characters');
+    }
+    if (data.notes !== undefined && data.notes !== null &&
+        (typeof data.notes !== 'string' || data.notes.length > 2000)) {
+      throw new BadRequestException('Notes must be text with at most 2000 characters');
+    }
+    const session = await this.prisma.posSession.findFirst({
+      where: { id: data.sessionId, tenantId, userId, status: 'OPEN' },
+    });
+    if (!session) throw new BadRequestException('Open POS session not found');
+    return this.prisma.posCashMovement.create({
+      data: {
+        tenantId, outletId: session.outletId, sessionId: session.id, type, amount,
+        referenceId: data.referenceId || undefined,
+        notes: data.notes || undefined,
+        createdBy: userId,
+      },
+    });
+  }
 
   async dailySummary(tenantId:string,sessionId:string){const session=await this.prisma.posSession.findFirst({where:{id:sessionId,tenantId}}); if(!session) throw new NotFoundException('Session not found'); const orders=await this.prisma.order.findMany({where:{tenantId,source:'POS',salesRepId:session.userId,createdAt:{gte:session.openedAt,...(session.closedAt?{lte:session.closedAt}:{})}},include:{payments:true}}); const movements=await this.prisma.posCashMovement.findMany({where:{tenantId,sessionId},orderBy:{createdAt:'asc'}}); const paymentSummary:any={}; for(const o of orders) for(const p of o.payments) paymentSummary[p.method]=(paymentSummary[p.method]||0)+Number(p.amount); const sum=(t:string)=>movements.filter(m=>m.type===t).reduce((s,m)=>s+Number(m.amount),0); return {session,totalOrders:orders.length,grossSales:orders.reduce((s,o)=>s+Number(o.total),0),paymentSummary,cash:{opening:Number(session.openingCash),sales:sum('SALE'),refunds:sum('REFUND'),cashIn:sum('IN'),cashOut:sum('OUT'),expected:Number(session.openingCash)+sum('SALE')-sum('REFUND')+sum('IN')-sum('OUT')}};}
   getReceipt(tenantId:string,orderId:string){return this.getReceiptTx(this.prisma,tenantId,orderId);}
