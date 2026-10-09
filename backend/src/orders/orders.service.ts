@@ -194,35 +194,40 @@ export class OrdersService {
   }
 
   async addPayment(id: string, tenantId: string, data: any) {
-    const order = await this.findOne(id, tenantId);
     const amount = Number(data.amount);
     if (!Number.isFinite(amount) || amount <= 0) {
       throw new BadRequestException('Payment amount must be a positive number');
     }
-    const newPaid = Number(order.paidAmount) + amount;
-    if (newPaid > Number(order.total) + 0.0001) {
-      throw new BadRequestException('Payment exceeds the outstanding order balance');
-    }
-    const balanceDue = Math.max(0, Number(order.total) - newPaid);
 
-    const [payment] = await this.prisma.$transaction([
-      this.prisma.payment.create({
+    // Apply the balance check and increment in one database transaction. A
+    // read-then-write flow can over-collect when two requests arrive together.
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.order.updateMany({
+        where: {
+          id,
+          tenantId,
+          balanceDue: { gte: amount },
+        },
+        data: {
+          paidAmount: { increment: amount },
+          balanceDue: { decrement: amount },
+        },
+      });
+      if (updated.count !== 1) {
+        throw new BadRequestException('Order not found for this company or payment exceeds the outstanding balance');
+      }
+
+      return tx.payment.create({
         data: {
           orderId: id,
           amount,
           method: data.method,
-          reference: data.reference,
-          notes: data.notes,
+          reference: typeof data.reference === 'string' ? data.reference.slice(0, 200) : undefined,
+          notes: typeof data.notes === 'string' ? data.notes.slice(0, 1000) : undefined,
           createdBy: data.createdBy,
         },
-      }),
-      this.prisma.order.update({
-        where: { id, tenantId },
-        data: { paidAmount: newPaid, balanceDue },
-      }),
-    ]);
-
-    return payment;
+      });
+    });
   }
 
   private async generateOrderNumber(tenantId: string): Promise<string> {
