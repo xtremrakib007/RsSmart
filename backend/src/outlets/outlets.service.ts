@@ -143,7 +143,7 @@ export class OutletsService {
       throw new NotFoundException('Assignment not found');
     }
 
-    const remainingAssignments = await this.prisma.userOutlet.count({ where: { userId: targetUserId } });
+    const remainingAssignments = await this.prisma.userOutlet.count({ where: { tenantId, userId: targetUserId } });
     if (remainingAssignments <= 1) {
       throw new BadRequestException("Cannot remove a user's last remaining outlet assignment");
     }
