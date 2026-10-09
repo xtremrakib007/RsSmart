@@ -32,7 +32,7 @@ export class ReportsService {
 
     const orders = await this.prisma.order.findMany({
       where,
-      include: { items: true, payments: true, customer: true, salesRep: { omit: { password: true } } },
+      include: { items: true, payments: { select: { id: true, amount: true, method: true, createdAt: true } }, customer: { select: { id: true, name: true, category: true } }, salesRep: { select: { id: true, firstName: true, lastName: true } } },
     });
 
     // Returned POS orders remain visible for audit, but must not inflate sales
