@@ -390,3 +390,59 @@ describe('PosTransactionsService — Refund safety', () => {
     expect(prisma.payment.create).not.toHaveBeenCalled();
   });
 });
+
+describe('PosTransactionsService — Cash movement validation', () => {
+  let service: PosTransactionsService;
+  let prisma: any;
+  const tenantId = 'tenant-1';
+  const userId = 'user-1';
+  const sessionId = 'session-1';
+
+  beforeEach(() => {
+    prisma = {
+      posSession: { findFirst: jest.fn().mockResolvedValue({ id: sessionId, tenantId, userId, outletId: 'outlet-1', status: 'OPEN' }) },
+      posCashMovement: { create: jest.fn().mockResolvedValue({ id: 'movement-1' }) },
+    };
+    service = new PosTransactionsService({} as any);
+    (service as any).prisma = prisma;
+  });
+
+  it.each([0, -1, NaN, Infinity, 1.001, 10.999])('rejects invalid cash movement amount %s', async amount => {
+    await expect(service.cashMovement(tenantId, userId, { sessionId, type: 'IN', amount }))
+      .rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.posCashMovement.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects invalid movement type and missing session ID', async () => {
+    await expect(service.cashMovement(tenantId, userId, { sessionId, type: 'SALE', amount: 1 }))
+      .rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.cashMovement(tenantId, userId, { type: 'IN', amount: 1 }))
+      .rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.posSession.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('rejects oversized or non-text optional fields', async () => {
+    await expect(service.cashMovement(tenantId, userId, {
+      sessionId, type: 'OUT', amount: 1, notes: 'x'.repeat(2001),
+    })).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.cashMovement(tenantId, userId, {
+      sessionId, type: 'OUT', amount: 1, referenceId: { unexpected: true },
+    })).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.posCashMovement.create).not.toHaveBeenCalled();
+  });
+
+  it('creates a valid movement scoped to the caller’s open tenant session', async () => {
+    await service.cashMovement(tenantId, userId, {
+      sessionId, type: 'IN', amount: 12.5, notes: 'Till float',
+    });
+    expect(prisma.posSession.findFirst).toHaveBeenCalledWith({
+      where: { id: sessionId, tenantId, userId, status: 'OPEN' },
+    });
+    expect(prisma.posCashMovement.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        tenantId, outletId: 'outlet-1', sessionId, type: 'IN', amount: 12.5,
+        notes: 'Till float', createdBy: userId,
+      }),
+    });
+  });
+});
