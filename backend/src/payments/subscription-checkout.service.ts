@@ -161,6 +161,34 @@ export class SubscriptionCheckoutService {
     const verified = await this.payments.verifyPayment(providerReference);
 
     if (verified.status === 'SUCCEEDED') {
+      // A successful provider status alone is not enough: bind the verified
+      // amount/currency to the immutable amount recorded for this checkout.
+      // This prevents a different or partially paid bill from activating a plan.
+      const expectedAmountMinor = Math.round(Number(checkout.amount) * 100);
+      const verifiedAmountMinor = Number(verified.amount?.amount);
+      const expectedCurrency = String(checkout.currency || '').toUpperCase();
+      const verifiedCurrency = String(verified.amount?.currency || '').toUpperCase();
+      if (!Number.isSafeInteger(expectedAmountMinor) || expectedAmountMinor <= 0 ||
+          !Number.isSafeInteger(verifiedAmountMinor) || verifiedAmountMinor !== expectedAmountMinor ||
+          !expectedCurrency || verifiedCurrency !== expectedCurrency) {
+        this.logger.error('Billplz payment verification mismatch; subscription activation withheld');
+        await this.audit.log({
+          tenantId: checkout.tenantId,
+          userId: undefined,
+          action: 'SUBSCRIPTION_CHECKOUT_VERIFICATION_MISMATCH',
+          entityType: 'SubscriptionCheckout',
+          entityId: checkout.id,
+          newValues: {
+            providerReference,
+            expectedAmountMinor,
+            verifiedAmountMinor: Number.isSafeInteger(verifiedAmountMinor) ? verifiedAmountMinor : null,
+            expectedCurrency,
+            verifiedCurrency,
+          },
+        });
+        throw new BadRequestException('Verified payment amount or currency does not match checkout');
+      }
+
       await this.prisma.subscriptionCheckout.update({
         where: { id: checkout.id },
         data: { status: 'SUCCEEDED', webhookProcessedAt: new Date() },
