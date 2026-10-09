@@ -24,6 +24,7 @@ export enum Permission {
 
   USERS_READ = 'users.read',
   USERS_MANAGE = 'users.manage',
+  OUTLETS_READ = 'outlets.read',
   OUTLETS_MANAGE = 'outlets.manage',
 
   WHATSAPP_MANAGE = 'whatsapp.manage',
