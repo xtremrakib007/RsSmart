@@ -21,12 +21,19 @@ export class ReportsService {
       include: { items: true, payments: true, customer: true, salesRep: { omit: { password: true } } },
     });
 
+    // Returned POS orders remain visible for audit, but must not inflate sales
+    // revenue. Keep grossRevenue for reconciliation and expose totalRevenue as
+    // revenue from orders that have not been returned.
+    const grossRevenue = orders.reduce((sum, o) => sum + Number(o.total), 0);
+    const saleOrders = orders.filter((o) => o.status !== 'RETURNED');
+    const netSalesRevenue = saleOrders.reduce((sum, o) => sum + Number(o.total), 0);
     const summary = {
       totalOrders: orders.length,
-      totalRevenue: orders.reduce((sum, o) => sum + Number(o.total), 0),
-      totalTax: orders.reduce((sum, o) => sum + Number(o.taxAmount), 0),
-      totalDiscount: orders.reduce((sum, o) => sum + Number(o.discount), 0),
-      averageOrderValue: orders.length > 0 ? orders.reduce((sum, o) => sum + Number(o.total), 0) / orders.length : 0,
+      grossRevenue,
+      totalRevenue: netSalesRevenue,
+      totalTax: saleOrders.reduce((sum, o) => sum + Number(o.taxAmount), 0),
+      totalDiscount: saleOrders.reduce((sum, o) => sum + Number(o.discount), 0),
+      averageOrderValue: saleOrders.length > 0 ? netSalesRevenue / saleOrders.length : 0,
       paidAmount: orders.reduce((sum, o) => sum + Number(o.paidAmount), 0),
       outstanding: orders.reduce((sum, o) => sum + Number(o.balanceDue), 0),
     };
@@ -47,7 +54,7 @@ export class ReportsService {
         dailyBreakdown[dateKey] = { orders: 0, revenue: 0 };
       }
       dailyBreakdown[dateKey].orders += 1;
-      dailyBreakdown[dateKey].revenue += Number(order.total);
+      if (order.status !== 'RETURNED') dailyBreakdown[dateKey].revenue += Number(order.total);
     }
 
     return { summary, byStatus, byPaymentMethod, dailyBreakdown, orders };
