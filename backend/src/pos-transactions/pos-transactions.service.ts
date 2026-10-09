@@ -7,7 +7,7 @@ const METHODS = ['CASH','CARD','CHEQUE','BANK_TRANSFER','CREDIT','MOBILE_MONEY']
 export class PosTransactionsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async checkout(tenantId: string, userId: string, data: any) {
+  async checkout(tenantId: string, userId: string, data: any, outletId?: string) {
     if (!data?.sessionId || typeof data.sessionId !== 'string' || !Array.isArray(data.items) || !data.items.length) {
       throw new BadRequestException('sessionId and items are required');
     }
@@ -22,7 +22,7 @@ export class PosTransactionsService {
         (typeof data.clientTransactionId !== 'string' || data.clientTransactionId.length < 1 || data.clientTransactionId.length > 200)) {
       throw new BadRequestException('clientTransactionId must be between 1 and 200 characters');
     }
-    const session = await this.prisma.posSession.findFirst({ where: { id: data.sessionId, tenantId, userId, status: 'OPEN' } });
+    const session = await this.prisma.posSession.findFirst({ where: { id: data.sessionId, tenantId, userId, status: 'OPEN', ...(outletId ? { outletId } : {}) } });
     if (!session) throw new BadRequestException('An open POS session is required');
     const customer = data.customerId ? await this.prisma.customer.findFirst({ where: { id: data.customerId, tenantId, isActive: true } }) : await this.getWalkInCustomer(tenantId);
     if (!customer) throw new NotFoundException('Customer not found');
@@ -91,7 +91,7 @@ export class PosTransactionsService {
       return await this.prisma.$transaction(async tx => {
       // Serialize the sale transaction with session closure and manual cash entries.
       const lockedSession = await tx.posSession.updateMany({
-        where: { id: data.sessionId, tenantId, userId, status: 'OPEN' },
+        where: { id: data.sessionId, tenantId, userId, status: 'OPEN', ...(outletId ? { outletId } : {}) },
         data: { status: 'OPEN' },
       });
       if (lockedSession.count !== 1) throw new BadRequestException('POS session is no longer open');
@@ -135,7 +135,7 @@ export class PosTransactionsService {
     }
   }
 
-  async refund(tenantId: string, userId: string, orderId: string, data: any) {
+  async refund(tenantId: string, userId: string, orderId: string, data: any, outletId?: string) {
     if (!data || typeof data.sessionId !== 'string' || !data.sessionId) {
       throw new BadRequestException('An open POS session is required');
     }
@@ -148,14 +148,14 @@ export class PosTransactionsService {
     }
 
     const order = await this.prisma.order.findFirst({
-      where: { id: orderId, tenantId, source: 'POS' },
+      where: { id: orderId, tenantId, source: 'POS', ...(outletId ? { outletId } : {}) },
       include: { items: { include: { product: { select: { trackInventory: true } } } } },
     });
     if (!order) throw new NotFoundException('POS order not found');
     if (order.status !== 'APPROVED') throw new BadRequestException('Only completed POS sales can be refunded');
 
     const session = await this.prisma.posSession.findFirst({
-      where: { id: data.sessionId, tenantId, userId, status: 'OPEN' },
+      where: { id: data.sessionId, tenantId, userId, status: 'OPEN', ...(outletId ? { outletId } : {}) },
     });
     if (!session) throw new BadRequestException('An open POS session is required');
     if (session.outletId !== order.outletId) {
@@ -246,7 +246,7 @@ export class PosTransactionsService {
     });
   }
 
-  async cashMovement(tenantId: string, userId: string, data: any) {
+  async cashMovement(tenantId: string, userId: string, data: any, outletId?: string) {
     const type = data?.type;
     const amount = Number(data?.amount);
     if (typeof data?.sessionId !== 'string' || !data.sessionId ||
@@ -286,9 +286,9 @@ export class PosTransactionsService {
     });
   }
 
-  async dailySummary(tenantId:string,sessionId:string){const session=await this.prisma.posSession.findFirst({where:{id:sessionId,tenantId}}); if(!session) throw new NotFoundException('Session not found'); const orders=await this.prisma.order.findMany({where:{tenantId,source:'POS',salesRepId:session.userId,createdAt:{gte:session.openedAt,...(session.closedAt?{lte:session.closedAt}:{})}},include:{payments:true}}); const movements=await this.prisma.posCashMovement.findMany({where:{tenantId,sessionId},orderBy:{createdAt:'asc'}}); const paymentSummary:any={}; for(const o of orders) for(const p of o.payments) paymentSummary[p.method]=(paymentSummary[p.method]||0)+Number(p.amount); const sum=(t:string)=>movements.filter(m=>m.type===t).reduce((s,m)=>s+Number(m.amount),0); return {session,totalOrders:orders.length,grossSales:orders.reduce((s,o)=>s+Number(o.total),0),paymentSummary,cash:{opening:Number(session.openingCash),sales:sum('SALE'),refunds:sum('REFUND'),cashIn:sum('IN'),cashOut:sum('OUT'),expected:Number(session.openingCash)+sum('SALE')-sum('REFUND')+sum('IN')-sum('OUT')}};}
-  getReceipt(tenantId:string,orderId:string){return this.getReceiptTx(this.prisma,tenantId,orderId);}
-  private async getReceiptTx(tx:any,tenantId:string,orderId:string){const order=await tx.order.findFirst({where:{id:orderId,tenantId,source:'POS'},include:{customer:{select:{id:true,name:true}},items:{include:{product:{select:{id:true,name:true,sku:true,barcode:true}}}},payments:{select:{id:true,amount:true,method:true,reference:true,createdAt:true}}}}); if(!order) throw new NotFoundException('POS receipt not found'); return {receiptNumber:order.orderNumber,order,printable:{currency:'MYR',number:order.orderNumber,customer:order.customer.name,items:order.items.map((i:any)=>({name:i.product.name,quantity:Number(i.quantity),unitPrice:Number(i.unitPrice),total:Number(i.total)})),subtotal:Number(order.subtotal),discount:Number(order.discount),tax:Number(order.taxAmount),total:Number(order.total),paid:Number(order.paidAmount),balance:Number(order.balanceDue),payments:order.payments.map((p:any)=>({method:p.method,amount:Number(p.amount),reference:p.reference}))}};}
+  async dailySummary(tenantId:string,sessionId:string,outletId?:string){const session=await this.prisma.posSession.findFirst({where:{id:sessionId,tenantId,...(outletId ? { outletId } : {})}}); if(!session) throw new NotFoundException('Session not found'); const orders=await this.prisma.order.findMany({where:{tenantId,outletId:session.outletId,source:'POS',salesRepId:session.userId,createdAt:{gte:session.openedAt,...(session.closedAt?{lte:session.closedAt}:{})}},include:{payments:true}}); const movements=await this.prisma.posCashMovement.findMany({where:{tenantId,outletId:session.outletId,sessionId},orderBy:{createdAt:'asc'}}); const paymentSummary:any={}; for(const o of orders) for(const p of o.payments) paymentSummary[p.method]=(paymentSummary[p.method]||0)+Number(p.amount); const sum=(t:string)=>movements.filter(m=>m.type===t).reduce((s,m)=>s+Number(m.amount),0); return {session,totalOrders:orders.length,grossSales:orders.reduce((s,o)=>s+Number(o.total),0),paymentSummary,cash:{opening:Number(session.openingCash),sales:sum('SALE'),refunds:sum('REFUND'),cashIn:sum('IN'),cashOut:sum('OUT'),expected:Number(session.openingCash)+sum('SALE')-sum('REFUND')+sum('IN')-sum('OUT')}};}
+  getReceipt(tenantId:string,orderId:string,outletId?:string){return this.getReceiptTx(this.prisma,tenantId,orderId,outletId);}
+  private async getReceiptTx(tx:any,tenantId:string,orderId:string,outletId?:string){const order=await tx.order.findFirst({where:{id:orderId,tenantId,source:'POS',...(outletId ? { outletId } : {})},include:{customer:{select:{id:true,name:true}},items:{include:{product:{select:{id:true,name:true,sku:true,barcode:true}}}},payments:{select:{id:true,amount:true,method:true,reference:true,createdAt:true}}}}); if(!order) throw new NotFoundException('POS receipt not found'); return {receiptNumber:order.orderNumber,order,printable:{currency:'MYR',number:order.orderNumber,customer:order.customer.name,items:order.items.map((i:any)=>({name:i.product.name,quantity:Number(i.quantity),unitPrice:Number(i.unitPrice),total:Number(i.total)})),subtotal:Number(order.subtotal),discount:Number(order.discount),tax:Number(order.taxAmount),total:Number(order.total),paid:Number(order.paidAmount),balance:Number(order.balanceDue),payments:order.payments.map((p:any)=>({method:p.method,amount:Number(p.amount),reference:p.reference}))}};}
   private async generateOrderNumber(tx:any,tenantId:string){const d=new Date();const prefix=`POS-${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}`;const count=await tx.order.count({where:{tenantId,source:'POS',orderNumber:{startsWith:prefix}}});return `${prefix}-${String(count+1).padStart(5,'0')}`;}
   private async getWalkInCustomer(tenantId:string){let c=await this.prisma.customer.findFirst({where:{tenantId,name:'Walk-in Customer'}});if(!c)c=await this.prisma.customer.create({data:{tenantId,name:'Walk-in Customer',country:'Malaysia'}});return c;}
 }
