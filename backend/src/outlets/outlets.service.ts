@@ -148,7 +148,8 @@ export class OutletsService {
       throw new BadRequestException("Cannot remove a user's last remaining outlet assignment");
     }
 
-    await this.prisma.userOutlet.delete({ where: { id: assignment.id } });
+    const deleted = await this.prisma.userOutlet.deleteMany({ where: { id: assignment.id, tenantId, outletId, userId: targetUserId } });
+    if (deleted.count !== 1) throw new NotFoundException('Assignment not found');
 
     await this.audit.log({
       tenantId,
