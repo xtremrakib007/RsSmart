@@ -354,7 +354,7 @@ describe('PosTransactionsService — Refund safety', () => {
   const sessionId = 'session-1';
   const order = {
     id: orderId, tenantId, source: 'POS', status: 'APPROVED', outletId: 'outlet-1',
-    orderNumber: 'POS-202610-00001', paidAmount: 20,
+    orderNumber: 'POS-202610-00001', total: 20, paidAmount: 20, balanceDue: 0,
     items: [{ productId: 'product-1', quantity: 2, product: { trackInventory: true } }],
   };
 
