@@ -496,3 +496,43 @@ describe('PosTransactionsService — Cash movement validation', () => {
     });
   });
 });
+
+describe('PosTransactionsService — Refund accounting integrity', () => {
+  let service: PosTransactionsService;
+  let prisma: any;
+
+  beforeEach(() => {
+    prisma = {
+      order: { findFirst: jest.fn() },
+      posSession: { findFirst: jest.fn() },
+      $transaction: jest.fn((fn: any) => fn(prisma)),
+    };
+    service = new PosTransactionsService(prisma as any);
+  });
+
+  it('rejects a full-stock refund when the original sale still has an unpaid balance', async () => {
+    prisma.order.findFirst.mockResolvedValue({
+      id: 'order-1',
+      tenantId: 'tenant-1',
+      outletId: 'outlet-1',
+      orderNumber: 'POS-001',
+      status: 'APPROVED',
+      total: 100,
+      paidAmount: 50,
+      balanceDue: 50,
+      items: [],
+    });
+    prisma.posSession.findFirst.mockResolvedValue({
+      id: 'session-1',
+      tenantId: 'tenant-1',
+      outletId: 'outlet-1',
+      userId: 'user-1',
+      status: 'OPEN',
+    });
+
+    await expect(
+      service.refund('tenant-1', 'user-1', 'order-1', { sessionId: 'session-1' }, 'outlet-1'),
+    ).rejects.toThrow('A full POS refund requires the sale to be fully paid with no outstanding balance');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+});
