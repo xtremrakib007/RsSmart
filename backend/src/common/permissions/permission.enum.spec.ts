@@ -30,6 +30,12 @@ describe('hasPermission', () => {
     expect(hasPermission(['orders.write'], Permission.SALES_CREATE)).toBe(false);
   });
 
+  it('preserves legacy users.write access to user-management actions', () => {
+    expect(hasPermission(['users.write'], Permission.USERS_MANAGE)).toBe(true);
+    expect(hasPermission(['users.read'], Permission.USERS_MANAGE)).toBe(false);
+    expect(hasPermission(['users.*'], Permission.USERS_MANAGE)).toBe(true);
+  });
+
   it('does not treat malformed or non-string grants as permissions', () => {
     expect(hasPermission(['product.*'], Permission.PRODUCTS_READ)).toBe(false);
     expect(hasPermission(['* '], Permission.PRODUCTS_READ)).toBe(false);
