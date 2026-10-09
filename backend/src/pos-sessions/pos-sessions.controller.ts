@@ -47,13 +47,15 @@ export class PosSessionsController {
 
   @Get(':id/report')
   @RequirePermissions(Permission.REPORTS_READ)
+  @UseGuards(OutletGuard)
   @ApiOperation({ summary: 'Get session report' })
-  getSessionReport(@Param('id') id: string, @CurrentUser() user: any) {
-    return this.posSessionsService.getSessionReport(user.tenantId, id);
+  getSessionReport(@Param('id') id: string, @CurrentUser() user: any, @CurrentOutlet() outlet: any) {
+    return this.posSessionsService.getSessionReport(user.tenantId, id, outlet.id);
   }
 
   @Get()
   @RequirePermissions(Permission.REPORTS_READ)
+  @UseGuards(OutletGuard)
   @ApiOperation({ summary: 'Get all sessions' })
   @ApiQuery({ name: 'userId', required: false })
   @ApiQuery({ name: 'outletId', required: false })
@@ -65,7 +67,8 @@ export class PosSessionsController {
     @Query('outletId') outletId?: string,
     @Query('fromDate') fromDate?: string,
     @Query('toDate') toDate?: string,
+    @CurrentOutlet() outlet?: any,
   ) {
-    return this.posSessionsService.getSessions(user.tenantId, { userId, outletId, fromDate, toDate });
+    return this.posSessionsService.getSessions(user.tenantId, { userId, outletId: outlet.id, fromDate, toDate });
   }
 }
