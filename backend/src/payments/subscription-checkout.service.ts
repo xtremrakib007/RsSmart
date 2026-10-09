@@ -86,7 +86,11 @@ export class SubscriptionCheckoutService {
         planId: plan.id,
         provider: this.payments.providerName,
         providerReference: result.providerReference,
-        status: result.status === 'SUCCEEDED' ? 'SUCCEEDED' : 'PENDING',
+        // Only the signed webhook may finalize/activate a subscription.
+        // Even if the provider adapter reports SUCCEEDED immediately, keep
+        // the local row PENDING so the verified webhook can acquire its
+        // lease, validate amount/currency, activate, and mark it processed.
+        status: 'PENDING',
         amount: amountSen / 100,
         currency: plan.currency || 'MYR',
         checkoutUrl: result.checkoutUrl,
