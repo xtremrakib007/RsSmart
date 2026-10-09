@@ -19,6 +19,9 @@ export class OrdersService {
       throw new BadRequestException('Page must be between 1 and 1000000 and limit must be between 1 and 100');
     }
     const where: any = { tenantId };
+    // The controller supplies the outlet resolved by OutletGuard. Never trust
+    // an arbitrary query outletId as an authorization decision.
+    if (filters?.outletId) where.outletId = filters.outletId;
     if (filters?.status) {
       const allowedStatuses = new Set([
         'DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'PROCESSING',
@@ -31,7 +34,6 @@ export class OrdersService {
     }
     if (filters?.customerId) where.customerId = filters.customerId;
     if (filters?.salesRepId) where.salesRepId = filters.salesRepId;
-    if (filters?.outletId) where.outletId = filters.outletId;
     if (filters?.fromDate || filters?.toDate) {
       where.createdAt = {};
       if (filters.fromDate) {
@@ -69,9 +71,9 @@ export class OrdersService {
     });
   }
 
-  async findOne(id: string, tenantId: string) {
+  async findOne(id: string, tenantId: string, outletId?: string) {
     const order = await this.prisma.order.findFirst({
-      where: { id, tenantId },
+      where: { id, tenantId, ...(outletId ? { outletId } : {}) },
       include: {
         customer: { select: { id: true, code: true, name: true, email: true, phone: true } },
         salesRep: { select: { id: true, firstName: true, lastName: true } },
@@ -197,7 +199,7 @@ export class OrdersService {
     });
   }
 
-  async updateStatus(id: string, tenantId: string, status: string, approvedBy?: string) {
+  async updateStatus(id: string, tenantId: string, status: string, approvedBy?: string, outletId?: string) {
     const allowedStatuses = new Set([
       'DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'PROCESSING',
       'SHIPPED', 'DELIVERED', 'CANCELLED', 'RETURNED',
@@ -211,7 +213,7 @@ export class OrdersService {
       updateData.approvedAt = new Date();
     }
     const order = await this.prisma.order.update({
-      where: { id, tenantId },
+      where: { id, tenantId, ...(outletId ? { outletId } : {}) },
       data: updateData,
       include: { customer: true, items: { include: { product: { select: { id: true, sku: true, name: true, barcode: true, basePrice: true, taxRate: true } } } } },
     });
@@ -259,7 +261,7 @@ export class OrdersService {
     return order;
   }
 
-  async addPayment(id: string, tenantId: string, data: any) {
+  async addPayment(id: string, tenantId: string, data: any, outletId?: string) {
     const amount = Number(data.amount);
     if (!Number.isFinite(amount) || amount <= 0 || Math.round(amount * 100) / 100 !== amount) {
       throw new BadRequestException('Payment amount must be positive and have no more than two decimal places');
@@ -281,6 +283,7 @@ export class OrdersService {
         where: {
           id,
           tenantId,
+          ...(outletId ? { outletId } : {}),
           balanceDue: { gte: amount },
         },
         data: {
