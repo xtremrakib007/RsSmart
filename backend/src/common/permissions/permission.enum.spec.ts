@@ -22,6 +22,14 @@ describe('hasPermission', () => {
     expect(hasPermission(['reports.*'], Permission.REPORTS_READ)).toBe(true);
   });
 
+  it('supports the explicit legacy orders-to-sales permission alias', () => {
+    expect(hasPermission(['orders.read'], Permission.SALES_READ)).toBe(true);
+    expect(hasPermission(['orders.create'], Permission.SALES_CREATE)).toBe(true);
+    expect(hasPermission(['orders.*'], Permission.SALES_READ)).toBe(true);
+    expect(hasPermission(['orders.*'], Permission.PRODUCTS_READ)).toBe(false);
+    expect(hasPermission(['orders.write'], Permission.SALES_CREATE)).toBe(false);
+  });
+
   it('does not treat malformed or non-string grants as permissions', () => {
     expect(hasPermission(['product.*'], Permission.PRODUCTS_READ)).toBe(false);
     expect(hasPermission(['* '], Permission.PRODUCTS_READ)).toBe(false);
