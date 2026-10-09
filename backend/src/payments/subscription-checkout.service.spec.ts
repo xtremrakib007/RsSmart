@@ -202,6 +202,32 @@ describe('SubscriptionCheckoutService', () => {
       expect(subscriptions.activate).not.toHaveBeenCalled();
     });
 
+    it('rejects a Billplz callback when the checkout belongs to another provider', async () => {
+      const x_signature = sign(fields);
+      prisma.subscriptionCheckout.findUnique.mockResolvedValue({
+        id: 'checkout-1',
+        tenantId,
+        subscriptionId,
+        provider: 'stripe',
+        providerReference: 'bill_abc',
+        status: 'PENDING',
+        amount: '99.00',
+        currency: 'MYR',
+        webhookProcessedAt: null,
+      });
+
+      const result = await service.handleBillplzWebhook({ ...fields, x_signature });
+
+      expect(result).toEqual({ received: true, matched: false });
+      expect(payments.verifyPayment).not.toHaveBeenCalled();
+      expect(subscriptions.activate).not.toHaveBeenCalled();
+      expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({
+        action: 'SUBSCRIPTION_CHECKOUT_PROVIDER_MISMATCH',
+        entityType: 'SubscriptionCheckout',
+        entityId: 'checkout-1',
+      }));
+    });
+
     it('is idempotent: a second webhook for an already-processed checkout is a no-op', async () => {
       const x_signature = sign(fields);
       prisma.subscriptionCheckout.findUnique.mockResolvedValue({
