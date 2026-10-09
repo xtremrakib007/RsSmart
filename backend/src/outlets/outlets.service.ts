@@ -69,8 +69,8 @@ export class OutletsService {
       throw new BadRequestException('The default outlet cannot be deactivated');
     }
 
-    const updated = await this.prisma.outlet.update({
-      where: { id: outletId },
+    const result = await this.prisma.outlet.updateMany({
+      where: { id: outletId, tenantId },
       data: {
         name: dto.name,
         address: dto.address,
@@ -79,6 +79,8 @@ export class OutletsService {
         status: dto.status,
       },
     });
+    if (result.count !== 1) throw new NotFoundException('Outlet not found');
+    const updated = await this.get(tenantId, outletId);
 
     await this.audit.log({
       tenantId,
