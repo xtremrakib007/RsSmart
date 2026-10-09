@@ -66,6 +66,7 @@ model Tenant {
   subscriptions Subscription[]
   invitations Invitation[]
   subscriptionCheckouts SubscriptionCheckout[]
+  policyAcceptances PolicyAcceptance[]
 
   @@map("tenants")
 }
@@ -105,6 +106,7 @@ model User {
   attendanceRecords AttendanceRecord[] @relation("AttendanceUser")
   whatsappAutomationRules WhatsAppAutomationRule[] @relation("WhatsAppAutomationCreatedBy")
   invitationsSent Invitation[] @relation("InvitationInvitedBy")
+  policyAcceptances PolicyAcceptance[]
   // Note: WhatsAppMessage.createdBy is intentionally a plain nullable String,
   // not a relation (same unenforced "actor" pattern as
   // StockMovement.createdBy / PosCashMovement.createdBy — it can be null
@@ -1160,6 +1162,28 @@ model SubscriptionCheckout {
 
   @@index([tenantId, createdAt])
   @@map("subscription_checkouts")
+}
+
+// ─── LEGAL: Immutable policy acceptance evidence ───────────────────────────
+model PolicyAcceptance {
+  id             String   @id @default(uuid())
+  tenantId       String   @map("tenant_id")
+  userId         String   @map("user_id")
+  policyKey      String   @map("policy_key")
+  policyTitle    String   @map("policy_title")
+  policyVersion  String   @map("policy_version")
+  contentHash    String   @map("content_hash")
+  action         String
+  flow           String
+  subscriptionId String?  @map("subscription_id")
+  acceptedAt     DateTime @default(now()) @map("accepted_at")
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  user           User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, userId, policyKey, policyVersion, flow, subscriptionId])
+  @@index([tenantId, acceptedAt])
+  @@index([tenantId, subscriptionId])
+  @@map("policy_acceptances")
 }
 
 // ─── ENUMS ─────────────────────────────────────────────────
