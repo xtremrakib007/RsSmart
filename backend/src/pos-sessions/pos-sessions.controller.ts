@@ -67,7 +67,7 @@ export class PosSessionsController {
     @Query('outletId') outletId?: string,
     @Query('fromDate') fromDate?: string,
     @Query('toDate') toDate?: string,
-    @CurrentOutlet() outlet?: any,
+    @CurrentOutlet() outlet: any,
   ) {
     return this.posSessionsService.getSessions(user.tenantId, { userId, outletId: outlet.id, fromDate, toDate });
   }
