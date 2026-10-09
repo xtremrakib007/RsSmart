@@ -78,17 +78,21 @@ export class OrdersService {
     let subtotal = 0;
     let taxAmount = 0;
     const items = data.items.map((item: any) => {
-      const itemSubtotal = item.quantity * item.unitPrice;
-      const itemTax = itemSubtotal * (item.taxRate || 0) / 100;
-      const itemTotal = itemSubtotal + itemTax - (item.discount || 0);
-      subtotal += itemSubtotal;
-      taxAmount += itemTax;
       if (!Number.isFinite(Number(item.quantity)) || Number(item.quantity) <= 0 ||
           !Number.isFinite(Number(item.unitPrice)) || Number(item.unitPrice) < 0 ||
           !Number.isFinite(Number(item.taxRate || 0)) || Number(item.taxRate || 0) < 0 ||
+          Number(item.taxRate || 0) > 100 ||
           !Number.isFinite(Number(item.discount || 0)) || Number(item.discount || 0) < 0) {
         throw new BadRequestException('Order item quantity, price, tax, or discount is invalid');
       }
+      const itemSubtotal = Number(item.quantity) * Number(item.unitPrice);
+      if (Number(item.discount || 0) > itemSubtotal) {
+        throw new BadRequestException('An item discount cannot exceed its subtotal');
+      }
+      const itemTax = itemSubtotal * Number(item.taxRate || 0) / 100;
+      const itemTotal = itemSubtotal + itemTax - Number(item.discount || 0);
+      subtotal += itemSubtotal;
+      taxAmount += itemTax;
       return {
         productId: item.productId,
         quantity: item.quantity,
@@ -101,7 +105,11 @@ export class OrdersService {
       };
     });
 
-    const total = subtotal + taxAmount - (data.discount || 0);
+    const orderDiscount = Number(data.discount || 0);
+    if (!Number.isFinite(orderDiscount) || orderDiscount < 0 || orderDiscount > subtotal + taxAmount) {
+      throw new BadRequestException('Order discount must be non-negative and cannot exceed the order subtotal plus tax');
+    }
+    const total = subtotal + taxAmount - orderDiscount;
     const orderNumber = await this.generateOrderNumber(tenantId);
 
     return this.prisma.order.create({
@@ -114,7 +122,7 @@ export class OrdersService {
         source: data.source || 'ERP',
         subtotal,
         taxAmount,
-        discount: data.discount || 0,
+        discount: orderDiscount,
         total,
         balanceDue: total,
         notes: data.notes,
