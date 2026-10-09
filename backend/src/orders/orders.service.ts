@@ -200,32 +200,57 @@ export class OrdersService {
   }
 
   async updateStatus(id: string, tenantId: string, status: string, approvedBy?: string, outletId?: string) {
-    const allowedStatuses = new Set([
-      'DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'PROCESSING',
-      'SHIPPED', 'DELIVERED', 'CANCELLED', 'RETURNED',
-    ]);
-    if (!allowedStatuses.has(status)) {
+    const transitions: Record<string, string[]> = {
+      DRAFT: ['PENDING_APPROVAL', 'APPROVED', 'CANCELLED'],
+      PENDING_APPROVAL: ['APPROVED', 'CANCELLED'],
+      APPROVED: ['PROCESSING', 'CANCELLED', 'RETURNED'],
+      PROCESSING: ['SHIPPED', 'DELIVERED', 'CANCELLED', 'RETURNED'],
+      SHIPPED: ['DELIVERED', 'RETURNED'],
+      DELIVERED: ['RETURNED'],
+      CANCELLED: [],
+      RETURNED: [],
+    };
+    if (!Object.prototype.hasOwnProperty.call(transitions, status)) {
       throw new BadRequestException('Invalid order status');
     }
+
+    const where = { id, tenantId, ...(outletId ? { outletId } : {}) };
+    const current = await this.prisma.order.findFirst({
+      where,
+      select: { id: true, status: true },
+    });
+    if (!current) throw new NotFoundException('Order not found');
+    // Repeated requests for the current state are harmless and must not emit
+    // duplicate approval notifications.
+    if (current.status === status) return this.findOne(id, tenantId, outletId);
+    if (!transitions[current.status]?.includes(status)) {
+      throw new BadRequestException(`Order cannot transition from ${current.status} to ${status}`);
+    }
+
     const updateData: any = { status };
     if (status === 'APPROVED') {
       updateData.approvedBy = approvedBy;
       updateData.approvedAt = new Date();
     }
-    const order = await this.prisma.order.update({
-      where: { id, tenantId, ...(outletId ? { outletId } : {}) },
+    // Compare-and-set the prior status so concurrent status requests cannot
+    // both advance the same order based on a stale read.
+    const changed = await this.prisma.order.updateMany({
+      where: { ...where, status: current.status },
       data: updateData,
-      include: { customer: true, items: { include: { product: { select: { id: true, sku: true, name: true, barcode: true, basePrice: true, taxRate: true } } } } },
     });
+    if (changed.count !== 1) {
+      throw new BadRequestException('Order status changed concurrently; reload and try again');
+    }
+    const order = await this.prisma.order.findFirst({
+      where,
+      include: {
+        customer: true,
+        items: { include: { product: { select: { id: true, sku: true, name: true, barcode: true, basePrice: true, taxRate: true } } } },
+      },
+    });
+    if (!order) throw new NotFoundException('Order not found');
 
-    // Sales order confirmation fires here — the moment an order is
-    // APPROVED, not at raw creation (DRAFT/PENDING_APPROVAL isn't a
-    // confirmed sale yet). This single choke point covers orders created
-    // both via OrdersService.create() and via the offline sync processor
-    // (src/sync/processors/sync-event.processor.ts), since both eventually
-    // reach APPROVED through this method. POS is skipped entirely inside
-    // NotificationsService. Fire-and-forget: never let a notification
-    // failure fail the status update itself.
+    // Notify only after the guarded transition actually succeeds.
     if (status === 'APPROVED') {
       this.notifications
         .sendOrderConfirmationIfApplicable({
@@ -236,28 +261,15 @@ export class OrdersService {
           customer: order.customer,
           items: order.items,
         })
-        .catch(() => {
-          // NotificationsService already logs; this catch just guarantees
-          // an unhandled rejection can never surface here.
-        });
-
-      // Push to the assigned sales rep's device(s) — this is the "order
-      // approved/assigned" notification for the Sales App. Distinct from
-      // the customer-facing email/WhatsApp confirmation above: this one
-      // goes to internal staff and fires regardless of source (including
-      // POS), since a sales rep should know when their order clears
-      // approval even if the customer doesn't get a separate message.
+        .catch(() => {});
       this.push
         .sendToUser(tenantId, order.salesRepId, {
           title: 'Order Approved',
           body: `Order ${order.orderNumber} has been approved.`,
           data: { type: 'ORDER_APPROVED', screen: 'order-detail', orderId: order.id },
         })
-        .catch(() => {
-          // PushService already logs; swallow so it never fails the update.
-        });
+        .catch(() => {});
     }
-
     return order;
   }
 
