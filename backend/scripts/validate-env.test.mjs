@@ -8,7 +8,7 @@ const script = fileURLToPath(new URL('./validate-env.mjs', import.meta.url));
 const baseEnv = {
   PATH: process.env.PATH,
   NODE_ENV: 'production',
-  DATABASE_URL: 'postgresql://app:long-random-password@db.example.com:5432/app',
+  DATABASE_URL: 'postgresql://app:long-random-password@db.rs-smart.internal:5432/app',
   JWT_SECRET: 'a'.repeat(40),
   JWT_REFRESH_SECRET: 'b'.repeat(40),
   REDIS_PASSWORD: 'redis-' + 'r'.repeat(40),
