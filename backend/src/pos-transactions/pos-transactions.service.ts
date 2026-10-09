@@ -178,12 +178,12 @@ export class PosTransactionsService {
     return this.prisma.$transaction(async tx => {
       // Serialize refunds with closure of the cashier session.
       const lockedSession = await tx.posSession.updateMany({
-        where: { id: data.sessionId, tenantId, userId, status: 'OPEN' },
+        where: { id: data.sessionId, tenantId, userId, status: 'OPEN', ...(outletId ? { outletId } : {}) },
         data: { status: 'OPEN' },
       });
       if (lockedSession.count !== 1) throw new BadRequestException('POS session is no longer open');
       const currentSession = await tx.posSession.findFirst({
-        where: { id: data.sessionId, tenantId, userId, status: 'OPEN' },
+        where: { id: data.sessionId, tenantId, userId, status: 'OPEN', ...(outletId ? { outletId } : {}) },
       });
       if (!currentSession || currentSession.outletId !== order.outletId) {
         throw new BadRequestException('Refund session must be open at the original sale outlet');
