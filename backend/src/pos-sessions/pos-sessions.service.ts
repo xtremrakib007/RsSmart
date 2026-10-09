@@ -73,38 +73,48 @@ export class PosSessionsService {
         throw new BadRequestException('Closing denominations must contain valid non-negative integer counts');
       }
     }
-    const session = await this.prisma.posSession.findFirst({
-      where: { id: sessionId, tenantId },
-    });
-    if (!session) throw new NotFoundException('Session not found');
-    if (session.status !== 'OPEN') throw new BadRequestException('Session is already closed');
+    return this.prisma.$transaction(async (tx: any) => {
+      // Lock the OPEN session row before reading movements. Cash movement
+      // creation uses the same lock, so closing cannot omit a concurrent entry.
+      const locked = await tx.posSession.updateMany({
+        where: { id: sessionId, tenantId, status: 'OPEN' },
+        data: { status: 'OPEN' },
+      });
+      if (locked.count !== 1) {
+        const exists = await tx.posSession.findFirst({ where: { id: sessionId, tenantId }, select: { id: true } });
+        if (!exists) throw new NotFoundException('Session not found');
+        throw new BadRequestException('Session is already closed');
+      }
+      const session = await tx.posSession.findFirst({
+        where: { id: sessionId, tenantId, status: 'OPEN' },
+      });
+      if (!session) throw new BadRequestException('Session is already closed');
 
-    const movements = await this.prisma.posCashMovement.findMany({
-      where: { tenantId, sessionId: session.id },
-    });
-    let expectedCash = Number(session.openingCash);
-    for (const movement of movements) {
-      const amount = Number(movement.amount);
-      if (movement.type === 'SALE' || movement.type === 'IN') expectedCash += amount;
-      if (movement.type === 'REFUND' || movement.type === 'OUT') expectedCash -= amount;
-    }
+      const movements = await tx.posCashMovement.findMany({
+        where: { tenantId, sessionId: session.id },
+      });
+      let expectedCash = Number(session.openingCash);
+      for (const movement of movements) {
+        const amount = Number(movement.amount);
+        if (movement.type === 'SALE' || movement.type === 'IN') expectedCash += amount;
+        if (movement.type === 'REFUND' || movement.type === 'OUT') expectedCash -= amount;
+      }
 
-    const discrepancy = data.closingCash - expectedCash;
-
-    // Conditional update makes closing a one-winner operation if two requests race.
-    const closed = await this.prisma.posSession.updateMany({
-      where: { id: sessionId, tenantId, status: 'OPEN' },
-      data: {
-        status: data.forceClose ? 'FORCE_CLOSED' : 'CLOSED',
-        closedAt: new Date(),
-        closingCash: data.closingCash,
-        closingDenominations: data.closingDenominations || undefined,
-        expectedCash,
-        discrepancy,
-      },
+      const discrepancy = data.closingCash - expectedCash;
+      const closed = await tx.posSession.updateMany({
+        where: { id: sessionId, tenantId, status: 'OPEN' },
+        data: {
+          status: data.forceClose ? 'FORCE_CLOSED' : 'CLOSED',
+          closedAt: new Date(),
+          closingCash: data.closingCash,
+          closingDenominations: data.closingDenominations || undefined,
+          expectedCash,
+          discrepancy,
+        },
+      });
+      if (closed.count !== 1) throw new BadRequestException('Session is already closed');
+      return tx.posSession.findFirst({ where: { id: sessionId, tenantId } });
     });
-    if (closed.count !== 1) throw new BadRequestException('Session is already closed');
-    return this.prisma.posSession.findFirst({ where: { id: sessionId, tenantId } });
   }
 
   async getSessionReport(tenantId: string, sessionId: string) {
