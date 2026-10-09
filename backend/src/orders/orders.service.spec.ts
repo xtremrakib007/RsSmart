@@ -88,6 +88,14 @@ describe('OrdersService.findAll security and pagination', () => {
     }));
   });
 
+  it('scopes order listing to the outlet authorized by OutletGuard', async () => {
+    await service.findAll('tenant-1', { outletId: 'outlet-authorized' });
+
+    expect(prisma.order.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { tenantId: 'tenant-1', outletId: 'outlet-authorized' },
+    }));
+  });
+
   it('applies validated pagination and status/date filters', async () => {
     await service.findAll('tenant-1', {
       page: '3', limit: '25', status: 'APPROVED',
