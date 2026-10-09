@@ -168,9 +168,9 @@ export class SubscriptionCheckoutService {
       const verifiedAmountMinor = Number(verified.amount?.amount);
       const expectedCurrency = String(checkout.currency || '').toUpperCase();
       const verifiedCurrency = String(verified.amount?.currency || '').toUpperCase();
-      if (checkout.amount != null && checkout.currency != null && (!Number.isSafeInteger(expectedAmountMinor) || expectedAmountMinor <= 0 ||
+      if (!Number.isSafeInteger(expectedAmountMinor) || expectedAmountMinor <= 0 ||
           !Number.isSafeInteger(verifiedAmountMinor) || verifiedAmountMinor !== expectedAmountMinor ||
-          !expectedCurrency || verifiedCurrency !== expectedCurrency)) {
+          !expectedCurrency || verifiedCurrency !== expectedCurrency) {
         this.logger.error('Billplz payment verification mismatch; subscription activation withheld');
         await this.audit.log({
           tenantId: checkout.tenantId,
