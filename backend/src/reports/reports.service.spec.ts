@@ -63,3 +63,30 @@ describe('ReportsService — returned POS sales', () => {
     expect(report.dailyBreakdown['2026-10-10']).toMatchObject({ orders: 2, revenue: 100 });
   });
 });
+
+
+describe('ReportsService date filter validation', () => {
+  let service: ReportsService;
+  let prisma: any;
+
+  beforeEach(() => {
+    prisma = { order: { findMany: jest.fn() }, payment: { findMany: jest.fn() } };
+    service = new ReportsService(prisma);
+  });
+
+  it('rejects invalid sales report dates before querying the database', async () => {
+    await expect(service.salesReport('tenant-1', {
+      fromDate: 'not-a-date',
+      toDate: '2026-10-10T23:59:59.999Z',
+    })).rejects.toThrow('fromDate and toDate must be valid dates');
+    expect(prisma.order.findMany).not.toHaveBeenCalled();
+  });
+
+  it('rejects inverted collection report date ranges before querying the database', async () => {
+    await expect(service.collectionReport('tenant-1', {
+      fromDate: '2026-10-11T00:00:00.000Z',
+      toDate: '2026-10-10T00:00:00.000Z',
+    })).rejects.toThrow('fromDate must be before or equal to toDate');
+    expect(prisma.payment.findMany).not.toHaveBeenCalled();
+  });
+});
