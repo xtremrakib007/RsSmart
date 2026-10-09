@@ -15,6 +15,7 @@ export class OrdersController {
   constructor(private ordersService: OrdersService) {}
 
   @Get()
+  @RequirePermissions(Permission.SALES_READ)
   @ApiOperation({ summary: 'Get all orders' })
   @ApiQuery({ name: 'status', required: false })
   @ApiQuery({ name: 'customerId', required: false })
@@ -37,6 +38,7 @@ export class OrdersController {
   }
 
   @Get(':id')
+  @RequirePermissions(Permission.SALES_READ)
   @ApiOperation({ summary: 'Get order by ID' })
   findOne(@Param('id') id: string, @CurrentUser() user: any) {
     return this.ordersService.findOne(id, user.tenantId);
