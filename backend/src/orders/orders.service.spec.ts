@@ -39,6 +39,7 @@ describe('OrdersService', () => {
   });
 
   it('triggers a customer confirmation and a push to the sales rep when status transitions to APPROVED', async () => {
+    prisma.order.findFirst.mockResolvedValueOnce({ id: 'order-1', status: 'PENDING_APPROVAL' }).mockResolvedValueOnce(updatedOrder);
     await service.updateStatus('order-1', 'tenant-1', 'APPROVED', 'manager-1');
 
     expect(notifications.sendOrderConfirmationIfApplicable).toHaveBeenCalledWith(
