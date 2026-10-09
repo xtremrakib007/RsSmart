@@ -28,13 +28,12 @@ export class UsersService {
   }
 
   async update(id: string, tenantId: string, data: { firstName?: string; lastName?: string }) {
-    await this.findOne(id, tenantId);
-    return this.prisma.user.update({
-      where: { id },
+    const result = await this.prisma.user.updateMany({
+      where: { id, tenantId },
       data,
-      include: { roles: { include: { role: true } } },
-      omit: { password: true },
     });
+    if (result.count !== 1) throw new NotFoundException('User not found');
+    return this.findOne(id, tenantId);
   }
 
   /**
@@ -49,10 +48,11 @@ export class UsersService {
       throw new BadRequestException('You cannot disable your own account');
     }
 
-    const updated = await this.prisma.user.update({
-      where: { id },
+    const result = await this.prisma.user.updateMany({
+      where: { id, tenantId },
       data: { status: 'INACTIVE', tokenVersion: { increment: 1 } },
     });
+    if (result.count !== 1) throw new NotFoundException('User not found');
 
     await this.audit.log({
       tenantId,
@@ -64,16 +64,17 @@ export class UsersService {
       newValues: { status: 'INACTIVE' },
     });
 
-    return { id: updated.id, status: updated.status };
+    return { id: target.id, status: 'INACTIVE' };
   }
 
   async enable(id: string, tenantId: string, actorUserId: string) {
     const target = await this.findOne(id, tenantId);
 
-    const updated = await this.prisma.user.update({
-      where: { id },
+    const result = await this.prisma.user.updateMany({
+      where: { id, tenantId },
       data: { status: 'ACTIVE' },
     });
+    if (result.count !== 1) throw new NotFoundException('User not found');
 
     await this.audit.log({
       tenantId,
@@ -85,7 +86,7 @@ export class UsersService {
       newValues: { status: 'ACTIVE' },
     });
 
-    return { id: updated.id, status: updated.status };
+    return { id: target.id, status: 'ACTIVE' };
   }
 
   /** Kept for backwards compatibility with the old DELETE /users/:id route. */
@@ -106,11 +107,18 @@ export class UsersService {
       throw new BadRequestException('One or more roleIds are invalid for this company');
     }
 
-    await this.prisma.$transaction([
-      this.prisma.userRole.deleteMany({ where: { userId: id } }),
-      this.prisma.userRole.createMany({ data: roleIds.map((roleId) => ({ userId: id, roleId, tenantId })) }),
-      this.prisma.user.update({ where: { id }, data: { tokenVersion: { increment: 1 } } }),
-    ]);
+    await this.prisma.$transaction(async (tx) => {
+      const userUpdate = await tx.user.updateMany({
+        where: { id, tenantId },
+        data: { tokenVersion: { increment: 1 } },
+      });
+      if (userUpdate.count !== 1) throw new NotFoundException('User not found');
+
+      await tx.userRole.deleteMany({ where: { userId: id, tenantId } });
+      await tx.userRole.createMany({
+        data: roleIds.map((roleId) => ({ userId: id, roleId, tenantId })),
+      });
+    });
 
     await this.audit.log({
       tenantId,
