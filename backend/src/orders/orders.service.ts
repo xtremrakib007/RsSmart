@@ -14,18 +14,39 @@ export class OrdersService {
   async findAll(tenantId: string, filters?: { status?: string; customerId?: string; salesRepId?: string; outletId?: string; fromDate?: string; toDate?: string; page?: string | number; limit?: string | number }) {
     const page = Number(filters?.page ?? 1);
     const limit = Number(filters?.limit ?? 50);
-    if (!Number.isInteger(page) || page < 1 || !Number.isInteger(limit) || limit < 1 || limit > 100) {
-      throw new BadRequestException('Page must be a positive integer and limit must be between 1 and 100');
+    if (!Number.isSafeInteger(page) || page < 1 || page > 1000000 ||
+        !Number.isInteger(limit) || limit < 1 || limit > 100) {
+      throw new BadRequestException('Page must be between 1 and 1000000 and limit must be between 1 and 100');
     }
     const where: any = { tenantId };
-    if (filters?.status) where.status = filters.status;
+    if (filters?.status) {
+      const allowedStatuses = new Set([
+        'DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'PROCESSING',
+        'SHIPPED', 'DELIVERED', 'CANCELLED', 'RETURNED',
+      ]);
+      if (!allowedStatuses.has(filters.status)) {
+        throw new BadRequestException('Invalid order status filter');
+      }
+      where.status = filters.status;
+    }
     if (filters?.customerId) where.customerId = filters.customerId;
     if (filters?.salesRepId) where.salesRepId = filters.salesRepId;
     if (filters?.outletId) where.outletId = filters.outletId;
     if (filters?.fromDate || filters?.toDate) {
       where.createdAt = {};
-      if (filters.fromDate) where.createdAt.gte = new Date(filters.fromDate);
-      if (filters.toDate) where.createdAt.lte = new Date(filters.toDate);
+      if (filters.fromDate) {
+        const fromDate = new Date(filters.fromDate);
+        if (Number.isNaN(fromDate.getTime())) throw new BadRequestException('Invalid fromDate filter');
+        where.createdAt.gte = fromDate;
+      }
+      if (filters.toDate) {
+        const toDate = new Date(filters.toDate);
+        if (Number.isNaN(toDate.getTime())) throw new BadRequestException('Invalid toDate filter');
+        where.createdAt.lte = toDate;
+      }
+      if (where.createdAt.gte && where.createdAt.lte && where.createdAt.gte > where.createdAt.lte) {
+        throw new BadRequestException('fromDate must be before or equal to toDate');
+      }
     }
 
     return this.prisma.order.findMany({
@@ -33,7 +54,13 @@ export class OrdersService {
       include: {
         customer: true,
         salesRep: { omit: { password: true } },
-        items: { include: { product: true } },
+        items: {
+          include: {
+            product: {
+              select: { id: true, sku: true, name: true, barcode: true, basePrice: true, taxRate: true },
+            },
+          },
+        },
         payments: true,
       },
       skip: (page - 1) * limit,
