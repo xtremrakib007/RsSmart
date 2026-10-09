@@ -22,6 +22,7 @@ export enum Permission {
 
   REPORTS_READ = 'reports.read',
 
+  USERS_READ = 'users.read',
   USERS_MANAGE = 'users.manage',
   OUTLETS_MANAGE = 'outlets.manage',
 
