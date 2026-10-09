@@ -19,6 +19,8 @@ export class OrdersController {
   @ApiQuery({ name: 'outletId', required: false })
   @ApiQuery({ name: 'fromDate', required: false })
   @ApiQuery({ name: 'toDate', required: false })
+  @ApiQuery({ name: 'page', required: false, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, example: 50, description: 'Maximum 100 records per request' })
   findAll(
     @CurrentUser() user: any,
     @Query('status') status?: string,
@@ -26,8 +28,10 @@ export class OrdersController {
     @Query('outletId') outletId?: string,
     @Query('fromDate') fromDate?: string,
     @Query('toDate') toDate?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
-    return this.ordersService.findAll(user.tenantId, { status, customerId, outletId, fromDate, toDate });
+    return this.ordersService.findAll(user.tenantId, { status, customerId, outletId, fromDate, toDate, page, limit });
   }
 
   @Get(':id')
