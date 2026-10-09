@@ -55,6 +55,14 @@ describe('OrdersService', () => {
   it.each(['DRAFT', 'PENDING_APPROVAL', 'PROCESSING', 'SHIPPED', 'CANCELLED'])(
     'does not trigger a confirmation or push for %s',
     async (status) => {
+      const previousStatus: Record<string, string> = {
+        DRAFT: 'PENDING_APPROVAL',
+        PENDING_APPROVAL: 'DRAFT',
+        PROCESSING: 'APPROVED',
+        SHIPPED: 'PROCESSING',
+        CANCELLED: 'DRAFT',
+      };
+      prisma.order.findFirst.mockResolvedValueOnce({ id: 'order-1', status: previousStatus[status] }).mockResolvedValueOnce(updatedOrder);
       await service.updateStatus('order-1', 'tenant-1', status);
 
       expect(notifications.sendOrderConfirmationIfApplicable).not.toHaveBeenCalled();
