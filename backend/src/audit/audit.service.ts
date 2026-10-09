@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
 
 const REDACTED = '[REDACTED]';
@@ -69,11 +69,20 @@ export class AuditService {
       where.createdAt = {};
       if (filters.fromDate) {
         const fromDate = new Date(filters.fromDate);
-        if (!Number.isNaN(fromDate.getTime())) where.createdAt.gte = fromDate;
+        if (Number.isNaN(fromDate.getTime())) {
+          throw new BadRequestException('Invalid fromDate filter');
+        }
+        where.createdAt.gte = fromDate;
       }
       if (filters.toDate) {
         const toDate = new Date(filters.toDate);
-        if (!Number.isNaN(toDate.getTime())) where.createdAt.lte = toDate;
+        if (Number.isNaN(toDate.getTime())) {
+          throw new BadRequestException('Invalid toDate filter');
+        }
+        where.createdAt.lte = toDate;
+      }
+      if (where.createdAt.gte && where.createdAt.lte && where.createdAt.gte > where.createdAt.lte) {
+        throw new BadRequestException('fromDate must be before or equal to toDate');
       }
     }
     return this.prisma.auditLog.findMany({
