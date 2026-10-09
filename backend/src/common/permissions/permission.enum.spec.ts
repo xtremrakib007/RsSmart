@@ -30,6 +30,13 @@ describe('hasPermission', () => {
     expect(hasPermission(['orders.write'], Permission.SALES_CREATE)).toBe(false);
   });
 
+  it('allows payment collection only through an explicit or payment-namespace grant', () => {
+    expect(hasPermission(['payments.collect'], Permission.PAYMENTS_COLLECT)).toBe(true);
+    expect(hasPermission(['payments.*'], Permission.PAYMENTS_COLLECT)).toBe(true);
+    expect(hasPermission(['sales.create'], Permission.PAYMENTS_COLLECT)).toBe(false);
+    expect(hasPermission(['orders.*'], Permission.PAYMENTS_COLLECT)).toBe(false);
+  });
+
   it('preserves legacy users.write access to user-management actions', () => {
     expect(hasPermission(['users.write'], Permission.USERS_MANAGE)).toBe(true);
     expect(hasPermission(['users.read'], Permission.USERS_MANAGE)).toBe(false);
