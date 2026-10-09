@@ -45,9 +45,25 @@ export class BillplzPaymentProvider implements PaymentProviderAdapter {
     return id;
   }
 
-  /** Sandbox vs production Billplz base URL — https://www.billplz-sandbox.com for testing. */
+  /**
+   * Sandbox vs production Billplz base URL. Never send the API key to an
+   * arbitrary host supplied through environment configuration.
+   */
   private get baseUrl(): string {
-    return process.env.BILLPLZ_BASE_URL || 'https://www.billplz.com';
+    const configured = process.env.BILLPLZ_BASE_URL || 'https://www.billplz.com';
+    let parsed: URL;
+    try {
+      parsed = new URL(configured);
+    } catch {
+      throw new ServiceUnavailableException('BILLPLZ_BASE_URL is invalid');
+    }
+    const allowedHosts = new Set(['www.billplz.com', 'www.billplz-sandbox.com']);
+    if (parsed.protocol !== 'https:' || !allowedHosts.has(parsed.hostname.toLowerCase()) ||
+        parsed.username || parsed.password || parsed.port || (parsed.pathname !== '/' && parsed.pathname !== '') ||
+        parsed.search || parsed.hash) {
+      throw new ServiceUnavailableException('BILLPLZ_BASE_URL must be an approved HTTPS Billplz endpoint');
+    }
+    return parsed.origin;
   }
 
   private authHeader(): string {
