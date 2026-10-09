@@ -66,7 +66,7 @@ export class OrdersController {
   }
 
   @Post(':id/payments')
-  @RequirePermissions(Permission.SALES_CREATE)
+  @RequirePermissions(Permission.PAYMENTS_COLLECT)
   @ApiOperation({ summary: 'Add payment to order' })
   addPayment(@Param('id') id: string, @Body() data: any, @CurrentUser() user: any) {
     return this.ordersService.addPayment(id, user.tenantId, { ...data, createdBy: user.userId });
