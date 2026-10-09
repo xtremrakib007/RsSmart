@@ -4,6 +4,8 @@ import { PosSessionsService } from './pos-sessions.service';
 import { CurrentUser } from '../common/decorators/user.decorator';
 import { CurrentOutlet } from '../common/decorators/outlet.decorator';
 import { OutletGuard } from '../common/guards/outlet.guard';
+import { RequirePermissions } from '../common/decorators/permissions.decorator';
+import { Permission } from '../common/permissions/permission.enum';
 
 @ApiTags('POS Sessions')
 @ApiBearerAuth()
@@ -12,6 +14,7 @@ export class PosSessionsController {
   constructor(private posSessionsService: PosSessionsService) {}
 
   @Get('active')
+  @RequirePermissions(Permission.POS_OPEN)
   @ApiOperation({ summary: 'Get active session for device' })
   getActiveSession(
     @Query('deviceId') deviceId: string,
@@ -21,6 +24,7 @@ export class PosSessionsController {
   }
 
   @Post('open')
+  @RequirePermissions(Permission.POS_OPEN)
   @UseGuards(OutletGuard)
   @ApiHeader({ name: 'x-outlet-id', required: false, description: "Which outlet this terminal is opening at; defaults to the user's default outlet" })
   @ApiOperation({ summary: 'Open POS session at an outlet' })
@@ -29,6 +33,7 @@ export class PosSessionsController {
   }
 
   @Put(':id/close')
+  @RequirePermissions(Permission.POS_CLOSE)
   @ApiOperation({ summary: 'Close POS session' })
   closeSession(
     @Param('id') id: string,
@@ -39,12 +44,14 @@ export class PosSessionsController {
   }
 
   @Get(':id/report')
+  @RequirePermissions(Permission.REPORTS_READ)
   @ApiOperation({ summary: 'Get session report' })
   getSessionReport(@Param('id') id: string, @CurrentUser() user: any) {
     return this.posSessionsService.getSessionReport(user.tenantId, id);
   }
 
   @Get()
+  @RequirePermissions(Permission.REPORTS_READ)
   @ApiOperation({ summary: 'Get all sessions' })
   @ApiQuery({ name: 'userId', required: false })
   @ApiQuery({ name: 'outletId', required: false })
