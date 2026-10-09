@@ -8,6 +8,9 @@ export enum Permission {
   PRODUCTS_READ = 'products.read',
   PRODUCTS_WRITE = 'products.write',
 
+  CUSTOMERS_READ = 'customers.read',
+  CUSTOMERS_WRITE = 'customers.write',
+
   INVENTORY_READ = 'inventory.read',
   INVENTORY_ADJUST = 'inventory.adjust',
 
