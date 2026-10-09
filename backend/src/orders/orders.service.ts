@@ -68,48 +68,57 @@ export class OrdersService {
     const productIds = [...new Set(data.items.map((item: any) => item.productId))];
     const products = await this.prisma.product.findMany({
       where: { tenantId, id: { in: productIds }, isActive: true },
-      select: { id: true },
+      select: { id: true, basePrice: true, taxRate: true },
     });
     if (products.length !== productIds.length) {
       throw new BadRequestException('One or more products are unavailable for this company');
     }
+    const productsById = new Map(products.map((product) => [product.id, product]));
 
-    // Calculate totals
+    // Prices and tax rates are authoritative catalog values. Never trust
+    // client-supplied unitPrice/taxRate: a modified request must not reduce
+    // the order total. Explicit discounts remain subject to validation.
     let subtotal = 0;
     let taxAmount = 0;
+    const money = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
     const items = data.items.map((item: any) => {
-      if (!Number.isFinite(Number(item.quantity)) || Number(item.quantity) <= 0 ||
-          !Number.isFinite(Number(item.unitPrice)) || Number(item.unitPrice) < 0 ||
-          !Number.isFinite(Number(item.taxRate || 0)) || Number(item.taxRate || 0) < 0 ||
-          Number(item.taxRate || 0) > 100 ||
-          !Number.isFinite(Number(item.discount || 0)) || Number(item.discount || 0) < 0) {
-        throw new BadRequestException('Order item quantity, price, tax, or discount is invalid');
+      const product = productsById.get(item.productId);
+      if (!product) throw new BadRequestException('One or more products are unavailable for this company');
+      const quantity = Number(item.quantity);
+      const unitPrice = Number(product.basePrice);
+      const taxRate = Number(product.taxRate);
+      const discount = Number(item.discount ?? 0);
+      if (!Number.isFinite(quantity) || quantity <= 0 ||
+          !Number.isFinite(unitPrice) || unitPrice < 0 ||
+          !Number.isFinite(taxRate) || taxRate < 0 || taxRate > 100 ||
+          !Number.isFinite(discount) || discount < 0) {
+        throw new BadRequestException('Order item quantity or discount is invalid');
       }
-      const itemSubtotal = Number(item.quantity) * Number(item.unitPrice);
-      if (Number(item.discount || 0) > itemSubtotal) {
+      const itemSubtotal = money(quantity * unitPrice);
+      if (discount > itemSubtotal) {
         throw new BadRequestException('An item discount cannot exceed its subtotal');
       }
-      const itemTax = itemSubtotal * Number(item.taxRate || 0) / 100;
-      const itemTotal = itemSubtotal + itemTax - Number(item.discount || 0);
-      subtotal += itemSubtotal;
-      taxAmount += itemTax;
+      const itemTax = money((itemSubtotal - discount) * taxRate / 100);
+      const itemTotal = money(itemSubtotal + itemTax - discount);
+      subtotal = money(subtotal + itemSubtotal);
+      taxAmount = money(taxAmount + itemTax);
       return {
         productId: item.productId,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        taxRate: item.taxRate || 0,
-        discount: item.discount || 0,
-        ...(item.notes !== undefined ? { notes: item.notes } : {}),
+        quantity,
+        unitPrice,
+        taxRate,
+        discount: money(discount),
+        ...(typeof item.notes === 'string' ? { notes: item.notes.slice(0, 1000) } : {}),
         taxAmount: itemTax,
         total: itemTotal,
       };
     });
 
-    const orderDiscount = Number(data.discount || 0);
+    const orderDiscount = Number(data.discount ?? 0);
     if (!Number.isFinite(orderDiscount) || orderDiscount < 0 || orderDiscount > subtotal + taxAmount) {
       throw new BadRequestException('Order discount must be non-negative and cannot exceed the order subtotal plus tax');
     }
-    const total = subtotal + taxAmount - orderDiscount;
+    const total = money(subtotal + taxAmount - orderDiscount);
     const orderNumber = await this.generateOrderNumber(tenantId);
 
     return this.prisma.order.create({
@@ -119,14 +128,14 @@ export class OrdersService {
         orderNumber,
         customerId: data.customerId,
         salesRepId: userId,
-        source: data.source || 'ERP',
+        source: 'ERP',
         subtotal,
         taxAmount,
         discount: orderDiscount,
         total,
         balanceDue: total,
-        notes: data.notes,
-        deliveryDate: data.deliveryDate,
+        notes: typeof data.notes === 'string' ? data.notes.slice(0, 2000) : undefined,
+        deliveryDate: data.deliveryDate ? new Date(data.deliveryDate) : undefined,
         items: {
           create: items,
         },
