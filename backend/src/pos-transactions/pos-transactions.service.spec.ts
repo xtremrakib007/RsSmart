@@ -435,6 +435,7 @@ describe('PosTransactionsService — Cash movement validation', () => {
     prisma = {
       posSession: { findFirst: jest.fn().mockResolvedValue({ id: sessionId, tenantId, userId, outletId: 'outlet-1', status: 'OPEN' }), updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
       posCashMovement: { create: jest.fn().mockResolvedValue({ id: 'movement-1' }) },
+      $transaction: jest.fn((fn: any) => fn(prisma)),
     };
     service = new PosTransactionsService({} as any);
     (service as any).prisma = prisma;
