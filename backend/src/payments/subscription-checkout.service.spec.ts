@@ -226,6 +226,33 @@ describe('SubscriptionCheckoutService', () => {
       expect(result).toEqual({ received: true, status: 'SUCCEEDED' });
     });
 
+    it('leaves a successful checkout retryable when subscription activation fails', async () => {
+      const x_signature = sign(fields);
+      prisma.subscriptionCheckout.findUnique.mockResolvedValue({
+        id: 'checkout-1',
+        tenantId,
+        subscriptionId,
+        providerReference: 'bill_abc',
+        status: 'PENDING',
+        amount: '99.00',
+        currency: 'MYR',
+        webhookProcessedAt: null,
+      });
+      payments.verifyPayment.mockResolvedValue({
+        status: 'SUCCEEDED',
+        amount: { amount: 9900, currency: 'MYR' },
+        paidAt: new Date(),
+      });
+      subscriptions.activate.mockRejectedValue(new Error('temporary database failure'));
+
+      await expect(service.handleBillplzWebhook({ ...fields, x_signature })).rejects.toThrow(
+        'temporary database failure',
+      );
+
+      expect(subscriptions.activate).toHaveBeenCalledWith(tenantId, subscriptionId, 'system:billplz-webhook');
+      expect(prisma.subscriptionCheckout.update).not.toHaveBeenCalled();
+    });
+
     it('audit-logs the activation without a human userId (webhook-driven)', async () => {
       const x_signature = sign(fields);
       prisma.subscriptionCheckout.findUnique.mockResolvedValue({
