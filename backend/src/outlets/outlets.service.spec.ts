@@ -111,9 +111,11 @@ describe('OutletsService', () => {
       prisma.outlet.findFirst.mockResolvedValue({ id: 'outlet-a', tenantId });
       prisma.userOutlet.findUnique.mockResolvedValue({ id: 'assignment-1', tenantId, userId: 'user-1', outletId: 'outlet-a' });
       prisma.userOutlet.count.mockResolvedValue(2);
-      prisma.userOutlet.delete.mockResolvedValue({});
+      prisma.userOutlet.deleteMany.mockResolvedValue({ count: 1 });
 
       const result = await service.unassignUser(tenantId, 'actor-1', 'outlet-a', 'user-1');
+      expect(prisma.userOutlet.count).toHaveBeenCalledWith({ where: { tenantId, userId: 'user-1' } });
+      expect(prisma.userOutlet.deleteMany).toHaveBeenCalledWith({ where: { id: 'assignment-1', tenantId, outletId: 'outlet-a', userId: 'user-1' } });
       expect(result.success).toBe(true);
     });
   });
