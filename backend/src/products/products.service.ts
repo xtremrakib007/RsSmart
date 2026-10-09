@@ -107,7 +107,7 @@ export class ProductsService {
   async remove(id: string, tenantId: string) {
     await this.findOne(id, tenantId);
     return this.prisma.product.update({
-      where: { id },
+      where: { id, tenantId },
       data: { isActive: false },
     });
   }
