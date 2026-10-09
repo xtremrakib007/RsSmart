@@ -282,7 +282,7 @@ export class PosTransactionsService {
       });
       if (locked.count !== 1) throw new BadRequestException('Open POS session not found');
       const session = await tx.posSession.findFirst({
-        where: { id: data.sessionId, tenantId, userId, status: 'OPEN' },
+        where: { id: data.sessionId, tenantId, userId, status: 'OPEN', ...(outletId ? { outletId } : {}) },
       });
       if (!session) throw new BadRequestException('Open POS session not found');
       return tx.posCashMovement.create({
