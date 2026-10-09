@@ -188,6 +188,8 @@ describe('SubscriptionCheckoutService', () => {
         subscriptionId,
         providerReference: 'bill_abc',
         status: 'PENDING',
+        amount: '99.00',
+        currency: 'MYR',
         webhookProcessedAt: null,
       });
       // ...but the provider itself still reports PENDING (e.g. a stale/forged replay).
