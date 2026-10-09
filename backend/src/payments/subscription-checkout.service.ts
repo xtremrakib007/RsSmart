@@ -68,16 +68,33 @@ export class SubscriptionCheckoutService {
 
     const plan = await this.subscriptions.getCurrentPlan(tenantId);
     const amountSen = Math.round(Number(plan.priceMonthly) * 100);
+    const currency = String(plan.currency || 'MYR').trim().toUpperCase();
+    if (!Number.isSafeInteger(amountSen) || amountSen <= 0 || amountSen > 999999999999 ||
+        !/^[A-Z]{3}$/.test(currency)) {
+      throw new BadRequestException('Subscription plan has an invalid payment amount or currency');
+    }
 
     const result = await this.payments.createCheckout(tenantId, actorUserId, {
       referenceType: 'Subscription',
       referenceId: subscription.id,
-      amount: { amount: amountSen, currency: plan.currency || 'MYR' },
+      amount: { amount: amountSen, currency },
       description: `${plan.name} subscription`,
       successUrl,
       cancelUrl,
       metadata: { callbackUrl: process.env.BILLPLZ_CALLBACK_URL || '' },
     });
+
+    // Do not persist a checkout that cannot be safely matched by a webhook
+    // or that would send a customer to a non-HTTPS provider URL.
+    let checkoutUrl: URL;
+    try {
+      checkoutUrl = new URL(result.checkoutUrl);
+    } catch {
+      throw new BadRequestException('Payment provider returned an invalid checkout URL');
+    }
+    if (!String(result.providerReference || '').trim() || checkoutUrl.protocol !== 'https:') {
+      throw new BadRequestException('Payment provider returned an invalid checkout reference or URL');
+    }
 
     const checkout = await this.prisma.subscriptionCheckout.create({
       data: {
@@ -92,8 +109,8 @@ export class SubscriptionCheckoutService {
         // lease, validate amount/currency, activate, and mark it processed.
         status: 'PENDING',
         amount: amountSen / 100,
-        currency: plan.currency || 'MYR',
-        checkoutUrl: result.checkoutUrl,
+        currency,
+        checkoutUrl: checkoutUrl.toString(),
       },
     });
 
