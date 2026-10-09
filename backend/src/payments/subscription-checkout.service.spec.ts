@@ -227,6 +227,29 @@ describe('SubscriptionCheckoutService', () => {
       expect(result).toEqual({ received: true, status: 'SUCCEEDED' });
     });
 
+    it('does not activate when another webhook worker owns the lease', async () => {
+      const x_signature = sign(fields);
+      prisma.subscriptionCheckout.findUnique
+        .mockResolvedValueOnce({
+          id: 'checkout-1', tenantId, subscriptionId, providerReference: 'bill_abc',
+          status: 'PENDING', amount: '99.00', currency: 'MYR', webhookProcessedAt: null,
+        })
+        .mockResolvedValueOnce({
+          id: 'checkout-1', tenantId, subscriptionId, providerReference: 'bill_abc',
+          status: 'PENDING', amount: '99.00', currency: 'MYR', webhookProcessedAt: null,
+          webhookProcessingAt: new Date(),
+        });
+      payments.verifyPayment.mockResolvedValue({
+        status: 'SUCCEEDED', amount: { amount: 9900, currency: 'MYR' }, paidAt: new Date(),
+      });
+      prisma.subscriptionCheckout.updateMany.mockResolvedValue({ count: 0 });
+
+      const result = await service.handleBillplzWebhook({ ...fields, x_signature });
+
+      expect(subscriptions.activate).not.toHaveBeenCalled();
+      expect(result).toEqual({ received: true, processing: true, status: 'PENDING' });
+    });
+
     it('leaves a successful checkout retryable when subscription activation fails', async () => {
       const x_signature = sign(fields);
       prisma.subscriptionCheckout.findUnique.mockResolvedValue({
