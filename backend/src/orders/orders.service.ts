@@ -80,6 +80,7 @@ export class OrdersService {
     // the order total. Explicit discounts remain subject to validation.
     let subtotal = 0;
     let taxAmount = 0;
+    let itemDiscountTotal = 0;
     const money = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
     const items = data.items.map((item: any) => {
       const product = productsById.get(item.productId);
@@ -102,6 +103,7 @@ export class OrdersService {
       const itemTotal = money(itemSubtotal + itemTax - discount);
       subtotal = money(subtotal + itemSubtotal);
       taxAmount = money(taxAmount + itemTax);
+      itemDiscountTotal = money(itemDiscountTotal + discount);
       return {
         productId: item.productId,
         quantity,
@@ -115,10 +117,11 @@ export class OrdersService {
     });
 
     const orderDiscount = Number(data.discount ?? 0);
-    if (!Number.isFinite(orderDiscount) || orderDiscount < 0 || orderDiscount > subtotal + taxAmount) {
-      throw new BadRequestException('Order discount must be non-negative and cannot exceed the order subtotal plus tax');
+    const preOrderDiscountTotal = money(subtotal + taxAmount - itemDiscountTotal);
+    if (!Number.isFinite(orderDiscount) || orderDiscount < 0 || orderDiscount > preOrderDiscountTotal) {
+      throw new BadRequestException('Order discount must be non-negative and cannot exceed the remaining order total');
     }
-    const total = money(subtotal + taxAmount - orderDiscount);
+    const total = money(preOrderDiscountTotal - orderDiscount);
     const orderNumber = await this.generateOrderNumber(tenantId);
 
     return this.prisma.order.create({
