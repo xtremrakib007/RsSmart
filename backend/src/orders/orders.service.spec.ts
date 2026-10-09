@@ -52,6 +52,17 @@ describe('OrdersService', () => {
     );
   });
 
+  it('rejects invalid order state transitions without updating or notifying', async () => {
+    prisma.order.findFirst.mockResolvedValueOnce({ id: 'order-1', status: 'DELIVERED' });
+
+    await expect(service.updateStatus('order-1', 'tenant-1', 'APPROVED', 'manager-1'))
+      .rejects.toThrow('Order cannot transition from DELIVERED to APPROVED');
+
+    expect(prisma.order.updateMany).not.toHaveBeenCalled();
+    expect(notifications.sendOrderConfirmationIfApplicable).not.toHaveBeenCalled();
+    expect(push.sendToUser).not.toHaveBeenCalled();
+  });
+
   it.each(['DRAFT', 'PENDING_APPROVAL', 'PROCESSING', 'SHIPPED', 'CANCELLED'])(
     'does not trigger a confirmation or push for %s',
     async (status) => {
