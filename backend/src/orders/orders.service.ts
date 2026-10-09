@@ -50,6 +50,30 @@ export class OrdersService {
   }
 
   async create(tenantId: string, outletId: string, userId: string, data: any) {
+    if (!Array.isArray(data.items) || data.items.length === 0) {
+      throw new BadRequestException('An order must contain at least one item');
+    }
+    const [outlet, customer, salesRep] = await Promise.all([
+      this.prisma.outlet.findFirst({ where: { id: outletId, tenantId, status: 'ACTIVE' }, select: { id: true } }),
+      this.prisma.customer.findFirst({ where: { id: data.customerId, tenantId, isActive: true }, select: { id: true } }),
+      this.prisma.user.findFirst({ where: { id: userId, tenantId, status: 'ACTIVE' }, select: { id: true } }),
+    ]);
+    if (!outlet) throw new BadRequestException('Outlet is not available for this company');
+    if (!customer) throw new BadRequestException('Customer not found for this company');
+    if (!salesRep) throw new BadRequestException('Sales user is not active in this company');
+
+    const productIds = [...new Set(data.items.map((item: any) => item.productId).filter(Boolean))];
+    if (productIds.length !== data.items.length) {
+      throw new BadRequestException('Every order item must reference a product');
+    }
+    const products = await this.prisma.product.findMany({
+      where: { tenantId, id: { in: productIds }, isActive: true },
+      select: { id: true },
+    });
+    if (products.length !== productIds.length) {
+      throw new BadRequestException('One or more products are unavailable for this company');
+    }
+
     // Calculate totals
     let subtotal = 0;
     let taxAmount = 0;
@@ -102,7 +126,7 @@ export class OrdersService {
       updateData.approvedAt = new Date();
     }
     const order = await this.prisma.order.update({
-      where: { id },
+      where: { id, tenantId },
       data: updateData,
       include: { customer: true, items: { include: { product: true } } },
     });
@@ -152,14 +176,21 @@ export class OrdersService {
 
   async addPayment(id: string, tenantId: string, data: any) {
     const order = await this.findOne(id, tenantId);
-    const newPaid = Number(order.paidAmount) + Number(data.amount);
-    const balanceDue = Number(order.total) - newPaid;
+    const amount = Number(data.amount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new BadRequestException('Payment amount must be a positive number');
+    }
+    const newPaid = Number(order.paidAmount) + amount;
+    if (newPaid > Number(order.total) + 0.0001) {
+      throw new BadRequestException('Payment exceeds the outstanding order balance');
+    }
+    const balanceDue = Math.max(0, Number(order.total) - newPaid);
 
     const [payment] = await this.prisma.$transaction([
       this.prisma.payment.create({
         data: {
           orderId: id,
-          amount: data.amount,
+          amount,
           method: data.method,
           reference: data.reference,
           notes: data.notes,
@@ -167,7 +198,7 @@ export class OrdersService {
         },
       }),
       this.prisma.order.update({
-        where: { id },
+        where: { id, tenantId },
         data: { paidAmount: newPaid, balanceDue },
       }),
     ]);
