@@ -143,10 +143,10 @@ export class PosTransactionsService {
 
     const order = await this.prisma.order.findFirst({
       where: { id: orderId, tenantId, source: 'POS' },
-      include: { items: true },
+      include: { items: { include: { product: { select: { trackInventory: true } } } } },
     });
     if (!order) throw new NotFoundException('POS order not found');
-    if (order.status === 'RETURNED') throw new BadRequestException('Order already refunded');
+    if (order.status !== 'APPROVED') throw new BadRequestException('Only completed POS sales can be refunded');
 
     const session = await this.prisma.posSession.findFirst({
       where: { id: data.sessionId, tenantId, userId, status: 'OPEN' },
@@ -173,16 +173,29 @@ export class PosTransactionsService {
       // Claim the refund atomically. A concurrent duplicate refund loses this
       // conditional update; throwing rolls back any stock/payment mutations.
       const claimed = await tx.order.updateMany({
-        where: { id: order.id, tenantId, source: 'POS', status: { not: 'RETURNED' } },
+        where: { id: order.id, tenantId, source: 'POS', status: 'APPROVED' },
         data: { status: 'RETURNED', paidAmount: 0, balanceDue: 0 },
       });
       if (claimed.count !== 1) throw new BadRequestException('Order already refunded');
 
       for (const item of order.items) {
-        const inv = await tx.inventory.findFirst({
-          where: { tenantId, outletId: order.outletId, productId: item.productId, warehouseId: data.warehouseId || null },
+        // Only tracked products consume stock. Restore the exact inventory row
+        // recorded by the original sale, never a warehouse chosen during refund.
+        if (!item.product?.trackInventory) continue;
+        const originalMovement = await tx.stockMovement.findFirst({
+          where: {
+            tenantId, referenceId: order.id, referenceType: 'POS_ORDER',
+            inventory: { productId: item.productId },
+          },
+          select: { inventoryId: true },
         });
-        if (!inv) throw new BadRequestException('Inventory not found for refund item at this outlet');
+        if (!originalMovement) {
+          throw new BadRequestException('Original stock movement not found; refund requires inventory review');
+        }
+        const inv = await tx.inventory.findFirst({
+          where: { id: originalMovement.inventoryId, tenantId, outletId: order.outletId, productId: item.productId },
+        });
+        if (!inv) throw new BadRequestException('Original inventory record not found for refund item');
         await tx.inventory.update({
           where: { id: inv.id },
           data: { quantity: { increment: item.quantity }, version: { increment: 1 } },
