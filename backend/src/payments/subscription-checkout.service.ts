@@ -189,11 +189,15 @@ export class SubscriptionCheckoutService {
         throw new BadRequestException('Verified payment amount or currency does not match checkout');
       }
 
+      // Activate first. If activation fails, leave the checkout unprocessed so
+      // the provider can retry. Marking the webhook processed before activation
+      // would permanently suppress recovery after a transient database failure.
+      // Subscription activation is itself idempotent for already-ACTIVE rows.
+      await this.subscriptions.activate(checkout.tenantId, checkout.subscriptionId, SYSTEM_ACTOR);
       await this.prisma.subscriptionCheckout.update({
         where: { id: checkout.id },
         data: { status: 'SUCCEEDED', webhookProcessedAt: new Date() },
       });
-      await this.subscriptions.activate(checkout.tenantId, checkout.subscriptionId, SYSTEM_ACTOR);
       await this.audit.log({
         tenantId: checkout.tenantId,
         userId: undefined,
