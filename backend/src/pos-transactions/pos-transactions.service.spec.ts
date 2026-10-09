@@ -464,6 +464,14 @@ describe('PosTransactionsService — Cash movement validation', () => {
     expect(prisma.posCashMovement.create).not.toHaveBeenCalled();
   });
 
+  it('rejects a cash movement if the session has already been closed', async () => {
+    prisma.posSession.updateMany.mockResolvedValue({ count: 0 });
+    await expect(service.cashMovement(tenantId, userId, {
+      sessionId, type: 'IN', amount: 5,
+    })).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.posCashMovement.create).not.toHaveBeenCalled();
+  });
+
   it('creates a valid movement scoped to the caller’s open tenant session', async () => {
     await service.cashMovement(tenantId, userId, {
       sessionId, type: 'IN', amount: 12.5, notes: 'Till float',
