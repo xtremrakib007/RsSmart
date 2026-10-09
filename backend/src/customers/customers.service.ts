@@ -39,9 +39,17 @@ export class CustomersService {
 
   async update(id: string, tenantId: string, data: any) {
     await this.findOne(id, tenantId);
+    // Exclude tenantId, balance, IDs, and timestamps from client-controlled updates.
+    const allowed = [
+      'code', 'name', 'email', 'phone', 'address', 'city', 'state',
+      'country', 'latitude', 'longitude', 'creditLimit', 'category', 'isActive',
+    ];
+    const safeData = Object.fromEntries(
+      allowed.filter((key) => Object.prototype.hasOwnProperty.call(data, key)).map((key) => [key, data[key]]),
+    );
     return this.prisma.customer.update({
       where: { id },
-      data,
+      data: safeData,
     });
   }
 
@@ -54,8 +62,24 @@ export class CustomersService {
   }
 
   async recordVisit(tenantId: string, data: any) {
+    const customer = await this.prisma.customer.findFirst({
+      where: { id: data.customerId, tenantId, isActive: true },
+      select: { id: true },
+    });
+    if (!customer) throw new NotFoundException('Customer not found for this company');
+
     return this.prisma.customerVisit.create({
-      data: { ...data, tenantId },
+      data: {
+        customerId: customer.id,
+        tenantId,
+        userId: data.userId,
+        checkInAt: data.checkInAt ? new Date(data.checkInAt) : new Date(),
+        ...(data.checkOutAt ? { checkOutAt: new Date(data.checkOutAt) } : {}),
+        ...(data.latitude !== undefined ? { latitude: data.latitude } : {}),
+        ...(data.longitude !== undefined ? { longitude: data.longitude } : {}),
+        ...(data.notes !== undefined ? { notes: data.notes } : {}),
+        ...(data.photos !== undefined ? { photos: data.photos } : {}),
+      },
     });
   }
 
