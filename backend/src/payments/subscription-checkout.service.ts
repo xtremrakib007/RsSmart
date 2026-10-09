@@ -114,8 +114,36 @@ export class SubscriptionCheckoutService {
 
     // Re-verify against the provider rather than trusting our own PENDING
     // row — the webhook may not have arrived yet even though the provider
-    // itself already shows the payment as settled.
+    // itself already shows the payment as settled. A provider "success" is
+    // not sufficient unless the amount and currency match this tenant-owned
+    // checkout record; otherwise a wrong bill could appear paid in the UI.
     const live = await this.payments.verifyPayment(providerReference);
+    if (live.status === 'SUCCEEDED') {
+      const expectedAmountMinor = Math.round(Number(checkout.amount) * 100);
+      const verifiedAmountMinor = Number(live.amount?.amount);
+      const expectedCurrency = String(checkout.currency || '').toUpperCase();
+      const verifiedCurrency = String(live.amount?.currency || '').toUpperCase();
+      if (!Number.isSafeInteger(expectedAmountMinor) || expectedAmountMinor <= 0 ||
+          !Number.isSafeInteger(verifiedAmountMinor) || verifiedAmountMinor !== expectedAmountMinor ||
+          !expectedCurrency || verifiedCurrency !== expectedCurrency) {
+        this.logger.error('Billplz checkout-status verification mismatch; success withheld');
+        await this.audit.log({
+          tenantId,
+          userId: undefined,
+          action: 'SUBSCRIPTION_CHECKOUT_STATUS_MISMATCH',
+          entityType: 'SubscriptionCheckout',
+          entityId: checkout.id,
+          newValues: {
+            providerReference,
+            expectedAmountMinor,
+            verifiedAmountMinor: Number.isSafeInteger(verifiedAmountMinor) ? verifiedAmountMinor : null,
+            expectedCurrency,
+            verifiedCurrency,
+          },
+        });
+        throw new BadRequestException('Verified payment amount or currency does not match checkout');
+      }
+    }
     return { providerReference, status: live.status, amount: live.amount, paidAt: live.paidAt };
   }
 
