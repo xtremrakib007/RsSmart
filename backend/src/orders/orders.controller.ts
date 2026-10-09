@@ -24,8 +24,10 @@ export class OrdersController {
   @ApiQuery({ name: 'toDate', required: false })
   @ApiQuery({ name: 'page', required: false, example: 1 })
   @ApiQuery({ name: 'limit', required: false, example: 50, description: 'Maximum 100 records per request' })
+  @UseGuards(OutletGuard)
   findAll(
     @CurrentUser() user: any,
+    @CurrentOutlet() outlet: any,
     @Query('status') status?: string,
     @Query('customerId') customerId?: string,
     @Query('outletId') outletId?: string,
@@ -34,14 +36,15 @@ export class OrdersController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
-    return this.ordersService.findAll(user.tenantId, { status, customerId, outletId, fromDate, toDate, page, limit });
+    return this.ordersService.findAll(user.tenantId, { status, customerId, outletId: outlet.id, fromDate, toDate, page, limit });
   }
 
   @Get(':id')
   @RequirePermissions(Permission.SALES_READ)
   @ApiOperation({ summary: 'Get order by ID' })
-  findOne(@Param('id') id: string, @CurrentUser() user: any) {
-    return this.ordersService.findOne(id, user.tenantId);
+  @UseGuards(OutletGuard)
+  findOne(@Param('id') id: string, @CurrentUser() user: any, @CurrentOutlet() outlet: any) {
+    return this.ordersService.findOne(id, user.tenantId, outlet.id);
   }
 
   @Post()
@@ -57,18 +60,21 @@ export class OrdersController {
   @RequirePermissions(Permission.SALES_CREATE)
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Update order status' })
+  @UseGuards(OutletGuard)
   updateStatus(
     @Param('id') id: string,
     @Body('status') status: string,
     @CurrentUser() user: any,
+    @CurrentOutlet() outlet: any,
   ) {
-    return this.ordersService.updateStatus(id, user.tenantId, status, user.userId);
+    return this.ordersService.updateStatus(id, user.tenantId, status, user.userId, outlet.id);
   }
 
   @Post(':id/payments')
   @RequirePermissions(Permission.PAYMENTS_COLLECT)
   @ApiOperation({ summary: 'Add payment to order' })
-  addPayment(@Param('id') id: string, @Body() data: any, @CurrentUser() user: any) {
-    return this.ordersService.addPayment(id, user.tenantId, { ...data, createdBy: user.userId });
+  @UseGuards(OutletGuard)
+  addPayment(@Param('id') id: string, @Body() data: any, @CurrentUser() user: any, @CurrentOutlet() outlet: any) {
+    return this.ordersService.addPayment(id, user.tenantId, { ...data, createdBy: user.userId }, outlet.id);
   }
 }
