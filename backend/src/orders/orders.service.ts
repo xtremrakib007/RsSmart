@@ -11,7 +11,12 @@ export class OrdersService {
     private push: PushService,
   ) {}
 
-  async findAll(tenantId: string, filters?: { status?: string; customerId?: string; salesRepId?: string; outletId?: string; fromDate?: string; toDate?: string }) {
+  async findAll(tenantId: string, filters?: { status?: string; customerId?: string; salesRepId?: string; outletId?: string; fromDate?: string; toDate?: string; page?: string | number; limit?: string | number }) {
+    const page = Number(filters?.page ?? 1);
+    const limit = Number(filters?.limit ?? 50);
+    if (!Number.isInteger(page) || page < 1 || !Number.isInteger(limit) || limit < 1 || limit > 100) {
+      throw new BadRequestException('Page must be a positive integer and limit must be between 1 and 100');
+    }
     const where: any = { tenantId };
     if (filters?.status) where.status = filters.status;
     if (filters?.customerId) where.customerId = filters.customerId;
@@ -31,6 +36,8 @@ export class OrdersService {
         items: { include: { product: true } },
         payments: true,
       },
+      skip: (page - 1) * limit,
+      take: limit,
       orderBy: { createdAt: 'desc' },
     });
   }
