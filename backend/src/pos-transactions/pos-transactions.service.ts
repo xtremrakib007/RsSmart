@@ -245,17 +245,26 @@ export class PosTransactionsService {
         (typeof data.notes !== 'string' || data.notes.length > 2000)) {
       throw new BadRequestException('Notes must be text with at most 2000 characters');
     }
-    const session = await this.prisma.posSession.findFirst({
-      where: { id: data.sessionId, tenantId, userId, status: 'OPEN' },
-    });
-    if (!session) throw new BadRequestException('Open POS session not found');
-    return this.prisma.posCashMovement.create({
-      data: {
-        tenantId, outletId: session.outletId, sessionId: session.id, type, amount,
-        referenceId: data.referenceId || undefined,
-        notes: data.notes || undefined,
-        createdBy: userId,
-      },
+    // Serialize cash entries against session closure by locking the OPEN row
+    // inside the same transaction that records the movement.
+    return this.prisma.$transaction(async (tx: any) => {
+      const locked = await tx.posSession.updateMany({
+        where: { id: data.sessionId, tenantId, userId, status: 'OPEN' },
+        data: { status: 'OPEN' },
+      });
+      if (locked.count !== 1) throw new BadRequestException('Open POS session not found');
+      const session = await tx.posSession.findFirst({
+        where: { id: data.sessionId, tenantId, userId, status: 'OPEN' },
+      });
+      if (!session) throw new BadRequestException('Open POS session not found');
+      return tx.posCashMovement.create({
+        data: {
+          tenantId, outletId: session.outletId, sessionId: session.id, type, amount,
+          referenceId: data.referenceId || undefined,
+          notes: data.notes || undefined,
+          createdBy: userId,
+        },
+      });
     });
   }
 
