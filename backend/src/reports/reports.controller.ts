@@ -3,10 +3,13 @@ import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger'
 import { AuthGuard } from '@nestjs/passport';
 import { ReportsService } from './reports.service';
 import { CurrentUser } from '../common/decorators/user.decorator';
+import { RequirePermissions } from '../common/decorators/permissions.decorator';
+import { Permission } from '../common/permissions/permission.enum';
 
 @ApiTags('Reports')
 @ApiBearerAuth()
 @UseGuards(AuthGuard('jwt'))
+@RequirePermissions(Permission.REPORTS_READ)
 @Controller('reports')
 export class ReportsController {
   constructor(private reportsService: ReportsService) {}
