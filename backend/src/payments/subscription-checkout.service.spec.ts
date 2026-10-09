@@ -70,6 +70,28 @@ describe('SubscriptionCheckoutService', () => {
       );
     });
 
+    it('keeps an immediately successful provider checkout pending until the signed webhook finalizes it', async () => {
+      subscriptions.getCurrent.mockResolvedValue({ id: subscriptionId, tenantId });
+      subscriptions.getCurrentPlan.mockResolvedValue({ id: 'plan-pro', name: 'Pro', priceMonthly: '99.00', currency: 'MYR' });
+      payments.createCheckout.mockResolvedValue({
+        providerReference: 'bill_paid_immediately',
+        checkoutUrl: 'https://pay',
+        status: 'SUCCEEDED',
+      });
+      prisma.subscriptionCheckout.create.mockResolvedValue({ id: 'checkout-1', status: 'PENDING' });
+
+      await service.createCheckout(tenantId, 'user-1', subscriptionId, 'https://x/success', 'https://x/cancel');
+
+      expect(prisma.subscriptionCheckout.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          providerReference: 'bill_paid_immediately',
+          status: 'PENDING',
+          webhookProcessedAt: undefined,
+        }),
+      });
+      expect(subscriptions.activate).not.toHaveBeenCalled();
+    });
+
     it('rejects a subscriptionId that is not the caller tenant\'s current subscription', async () => {
       subscriptions.getCurrent.mockResolvedValue({ id: 'sub-other', tenantId });
 
