@@ -21,7 +21,7 @@ export class InventoryService {
 
     const inventory = await this.prisma.inventory.findMany({
       where,
-      include: { product: true },
+      include: { product: { select: { id: true, sku: true, name: true, barcode: true, minStock: true, isActive: true } } },
     });
 
     if (filters?.lowStock) {
@@ -37,7 +37,7 @@ export class InventoryService {
   async getStockMovement(tenantId: string, outletId: string, productId: string) {
     return this.prisma.stockMovement.findMany({
       where: { tenantId, outletId, inventory: { productId } },
-      include: { inventory: { include: { product: true } } },
+      include: { inventory: { include: { product: { select: { id: true, sku: true, name: true, barcode: true } } } },
       orderBy: { createdAt: 'desc' },
       take: 50,
     });
@@ -114,6 +114,8 @@ export class InventoryService {
   }
 
   async reserveStock(tenantId: string, outletId: string, productId: string, quantity: number) {
+    if (typeof productId !== 'string' || !productId.trim()) throw new BadRequestException('A valid productId is required');
+    if (!Number.isFinite(quantity) || quantity <= 0) throw new BadRequestException('Reservation quantity must be positive and finite');
     const inventory = await this.prisma.inventory.findFirst({
       where: { tenantId, outletId, productId },
     });
@@ -126,7 +128,7 @@ export class InventoryService {
 
     // Phase 26: optimistic locking
     const updated = await this.prisma.inventory.updateMany({
-      where: { id: inventory.id, version: inventory.version },
+      where: { id: inventory.id, tenantId, outletId, version: inventory.version },
       data: { reserved: { increment: quantity }, version: { increment: 1 } },
     });
 
@@ -138,16 +140,19 @@ export class InventoryService {
   }
 
   async releaseStock(tenantId: string, outletId: string, productId: string, quantity: number) {
+    if (typeof productId !== 'string' || !productId.trim()) throw new BadRequestException('A valid productId is required');
+    if (!Number.isFinite(quantity) || quantity <= 0) throw new BadRequestException('Release quantity must be positive and finite');
     const inventory = await this.prisma.inventory.findFirst({
       where: { tenantId, outletId, productId },
     });
     if (!inventory) throw new NotFoundException('Inventory not found at this outlet');
 
-    const newReserved = Math.max(0, Number(inventory.reserved) - quantity);
+    if (Number(inventory.reserved) < quantity) throw new BadRequestException('Cannot release more stock than is reserved');
+    const newReserved = Number(inventory.reserved) - quantity;
 
     // Phase 26: optimistic locking
     const updated = await this.prisma.inventory.updateMany({
-      where: { id: inventory.id, version: inventory.version },
+      where: { id: inventory.id, tenantId, outletId, version: inventory.version },
       data: { reserved: newReserved, version: { increment: 1 } },
     });
 
