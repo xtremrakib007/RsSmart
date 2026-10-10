@@ -58,6 +58,14 @@ class PosSessionProvider @Inject constructor(@ApplicationContext context: Contex
         }
     }
 
+    suspend fun clearIdentity() {
+        dataStore.edit { prefs ->
+            prefs.remove(TENANT_ID_KEY)
+            prefs.remove(USER_ID_KEY)
+            prefs.remove(ACTIVE_SESSION_ID_KEY)
+        }
+    }
+
     suspend fun setActiveSession(sessionId: String) {
         dataStore.edit { prefs -> prefs[ACTIVE_SESSION_ID_KEY] = sessionId }
     }
