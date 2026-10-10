@@ -40,7 +40,8 @@ fun PosNavHost(navController: NavHostController = rememberNavController()) {
                 onNavigateToCart = { navController.navigate(PosRoutes.CART) },
                 onCheckout = { navController.navigate(PosRoutes.CHECKOUT) },
                 onScanBarcode = { navController.navigate(PosRoutes.SCANNER) },
-                onPriceCheck = { navController.navigate(PosRoutes.PRICE_CHECK) }
+                onPriceCheck = { navController.navigate(PosRoutes.PRICE_CHECK) },
+                onReturns = { navController.navigate(PosRoutes.RETURNS) }
             )
         }
         composable(PosRoutes.CART) {
