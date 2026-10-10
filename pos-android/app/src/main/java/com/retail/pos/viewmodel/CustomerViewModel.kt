@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.UUID
@@ -39,7 +40,7 @@ class CustomerViewModel @Inject constructor(
 
     fun save(id: String?, name: String, phone: String, email: String, loyaltyNumber: String?) {
         viewModelScope.launch {
-            val tenantId = sessionProvider.tenantId.firstOrBlank()
+            val tenantId = sessionProvider.tenantId.first().ifBlank { "" }
             val cleanedName = name.trim()
             val normalizedPhone = normalizeMalaysianPhone(phone)
             if (tenantId.isBlank()) {
