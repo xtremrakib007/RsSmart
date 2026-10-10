@@ -94,7 +94,7 @@ fun CustomerScreen(
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) }
             )
             Spacer(Modifier.height(8.dp))
-            Text("Customer records are currently stored on this device and marked for sync. Server sync must be configured before using this as a multi-device customer database.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Customer records are stored on this device only. Server sync is not enabled yet, so records will not appear on other devices.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (!message.isNullOrBlank()) {
                 Spacer(Modifier.height(8.dp))
                 Text(message!!, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
