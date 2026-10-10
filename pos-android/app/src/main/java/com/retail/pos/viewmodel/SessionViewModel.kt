@@ -86,6 +86,16 @@ class SessionViewModel @Inject constructor(
         }
     }
 
+    fun logout(onComplete: () -> Unit) {
+        viewModelScope.launch {
+            val current = sessionDao.getOpenSessionOnce(deviceId)
+            if (current == null) {
+                sessionProvider.clearIdentity()
+                onComplete()
+            }
+        }
+    }
+
     fun resetAction() {
         _sessionAction.value = SessionAction.Idle
     }
