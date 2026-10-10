@@ -21,6 +21,9 @@ import com.retail.shared.data.local.entity.Product
 fun ProductCatalogScreen(
     onNavigateToCart: () -> Unit,
     onCheckout: () -> Unit,
+    onScanBarcode: () -> Unit,
+    scannedBarcode: String = "",
+    onBarcodeConsumed: () -> Unit = {},
     viewModel: CartViewModel = hiltViewModel()
 ) {
     val products by viewModel.products.collectAsState()
@@ -28,14 +31,24 @@ fun ProductCatalogScreen(
     val itemCount by viewModel.itemCount.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
 
+    LaunchedEffect(scannedBarcode) {
+        if (scannedBarcode.isNotBlank()) {
+            viewModel.setSearchQuery(scannedBarcode)
+            onBarcodeConsumed()
+        }
+    }
+
     // Session ID now comes from CartViewModel, which reads it from PosSessionProvider —
     // the same active session SessionViewModel opened, no per-screen placeholder needed.
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Product Catalog") },
+                title = { Text("RsSmart POS") },
                 actions = {
+                    IconButton(onClick = onScanBarcode) {
+                        Icon(Icons.Default.QrCodeScanner, contentDescription = "Scan barcode")
+                    }
                     BadgedBox(
                         badge = {
                             if (itemCount > 0) {
@@ -70,10 +83,19 @@ fun ProductCatalogScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp),
-                placeholder = { Text("Search by name, SKU, or barcode...") },
+                placeholder = { Text("Price check: product, SKU or barcode") },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                 singleLine = true
             )
+
+            if (products.isEmpty() && searchQuery.isNotBlank()) {
+                Text(
+                    "No matching product. Check the barcode/SKU or add the item in inventory.",
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
 
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(minSize = 160.dp),
