@@ -14,6 +14,7 @@ import dagger.hilt.components.SingletonComponent
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import javax.inject.Named
 import javax.inject.Singleton
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "pos_settings")
@@ -27,11 +28,13 @@ object PosAppModule {
 
     @Provides
     @Singleton
+    @Named("posAuthHttpClient")
     fun provideAuthHttpClient(): OkHttpClient = OkHttpClient.Builder().build()
 
     @Provides
     @Singleton
-    fun provideAuthRetrofit(client: OkHttpClient): Retrofit {
+    @Named("posAuthRetrofit")
+    fun provideAuthRetrofit(@Named("posAuthHttpClient") client: OkHttpClient): Retrofit {
         val baseUrl = BuildConfig.API_BASE_URL.trim().let { if (it.endsWith("/")) it else "$it/" }
         return Retrofit.Builder()
             .baseUrl(baseUrl)
@@ -42,5 +45,6 @@ object PosAppModule {
 
     @Provides
     @Singleton
-    fun providePosAuthApi(retrofit: Retrofit): PosAuthApi = retrofit.create(PosAuthApi::class.java)
+    fun providePosAuthApi(@Named("posAuthRetrofit") retrofit: Retrofit): PosAuthApi =
+        retrofit.create(PosAuthApi::class.java)
 }
