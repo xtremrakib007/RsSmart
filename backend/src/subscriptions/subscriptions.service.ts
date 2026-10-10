@@ -42,7 +42,7 @@ interface SubscriptionPlanRecord {
   maxOutlets: number;
   maxUsers: number;
   maxPosDevices: number;
-  features: Record<string, boolean>;
+  features: unknown;
   isActive: boolean;
   sortOrder: number;
   createdAt: Date;
