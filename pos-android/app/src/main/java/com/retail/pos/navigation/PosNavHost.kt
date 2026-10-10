@@ -8,6 +8,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.retail.pos.ui.cart.CartScreen
+import com.retail.pos.ui.customer.CustomerScreen
 import com.retail.pos.ui.checkout.CheckoutScreen
 import com.retail.pos.ui.payment.PaymentScreen
 import com.retail.pos.ui.product.BarcodeScannerScreen
@@ -20,6 +21,7 @@ object PosRoutes {
     const val CART = "cart"
     const val CHECKOUT = "checkout"
     const val SCANNER = "scanner"
+    const val CUSTOMERS = "customers"
     const val PAYMENT = "payment/{orderId}"
     const val PAYMENT_BASE = "payment/"
 }
@@ -36,8 +38,12 @@ fun PosNavHost(navController: NavHostController = rememberNavController()) {
                 onNavigateToCart = { navController.navigate(PosRoutes.CART) },
                 onCheckout = { navController.navigate(PosRoutes.CHECKOUT) },
                 scannedBarcode = scannedBarcode,
-                onScanBarcode = { navController.navigate(PosRoutes.SCANNER) }
+                onScanBarcode = { navController.navigate(PosRoutes.SCANNER) },
+                onCustomers = { navController.navigate(PosRoutes.CUSTOMERS) }
             )
+        }
+        composable(PosRoutes.CUSTOMERS) {
+            CustomerScreen(onBack = { navController.popBackStack() })
         }
         composable(PosRoutes.SCANNER) {
             BarcodeScannerScreen(
