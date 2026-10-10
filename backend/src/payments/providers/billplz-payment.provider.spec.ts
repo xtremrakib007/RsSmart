@@ -62,8 +62,26 @@ describe('BillplzPaymentProvider', () => {
       );
     });
 
+    it('rejects a successful API response with a mismatched amount', async () => {
+      mockFetchOnce(200, { id: 'bill_abc', url: 'https://billplz-sandbox.com/bills/bill_abc', paid: false, amount: '4999' });
+
+      await expect(provider.createCheckout(params)).rejects.toThrow(ServiceUnavailableException);
+    });
+
+    it('rejects a successful API response with an untrusted checkout URL', async () => {
+      mockFetchOnce(200, { id: 'bill_abc', url: 'https://attacker.example/bills/bill_abc', paid: false, amount: '5000' });
+
+      await expect(provider.createCheckout(params)).rejects.toThrow(ServiceUnavailableException);
+    });
+
+    it('rejects a successful API response without a bill ID', async () => {
+      mockFetchOnce(200, { url: 'https://billplz-sandbox.com/bills/bill_abc', paid: false, amount: '5000' });
+
+      await expect(provider.createCheckout(params)).rejects.toThrow(ServiceUnavailableException);
+    });
+
     it('sends Basic auth built from the API key with an empty password', async () => {
-      mockFetchOnce(200, { id: 'bill_abc', url: 'https://x', paid: false, amount: '5000' });
+      mockFetchOnce(200, { id: 'bill_abc', url: 'https://billplz-sandbox.com/bills/bill_abc', paid: false, amount: '5000' });
 
       await provider.createCheckout(params);
 
