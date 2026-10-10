@@ -19,7 +19,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
-import androidx.core.content.ContextCompat
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.common.InputImage
 import com.retail.pos.viewmodel.CartViewModel
