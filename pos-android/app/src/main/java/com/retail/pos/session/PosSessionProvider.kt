@@ -41,9 +41,6 @@ class PosSessionProvider @Inject constructor(@ApplicationContext context: Contex
         private val USER_ID_KEY = stringPreferencesKey("user_id")
         private val ACTIVE_SESSION_ID_KEY = stringPreferencesKey("active_session_id")
 
-        // Used only until real auth/provisioning is wired up (see MISSING-FEATURE-PRD).
-        private const val DEFAULT_TENANT_ID = "tenant-1"
-        private const val DEFAULT_USER_ID = "user-001"
     }
 
     val tenantId: Flow<String> = dataStore.data.map { it[TENANT_ID_KEY] ?: DEFAULT_TENANT_ID }
