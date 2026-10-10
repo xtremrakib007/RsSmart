@@ -6,6 +6,11 @@ plugins {
     kotlin("kapt")
 }
 
+val apiBaseUrl = providers.gradleProperty("rssmartApiBaseUrl")
+    .orElse(providers.environmentVariable("RSSMART_API_BASE_URL"))
+    .orElse("https://api.retail.example.com/")
+    .get()
+
 android {
     namespace = "com.retail.shared"
     compileSdk = 34
@@ -15,6 +20,11 @@ android {
         targetSdk = 34
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles("consumer-rules.pro")
+        buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     buildTypes {
