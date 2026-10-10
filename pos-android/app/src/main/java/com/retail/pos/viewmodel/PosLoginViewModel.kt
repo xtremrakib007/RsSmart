@@ -97,12 +97,13 @@ class PosLoginViewModel @Inject constructor(
         }
     }
 
-    fun logout() {
+    fun logout(onComplete: () -> Unit = {}) {
         viewModelScope.launch {
             authStore.clear()
             sessionProvider.clearActiveSession()
             sessionProvider.setIdentity("", "")
             _state.value = LoginState.Idle
+            onComplete()
         }
     }
 
