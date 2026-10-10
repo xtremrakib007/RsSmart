@@ -13,8 +13,10 @@ import com.retail.pos.ui.product.BarcodeScannerScreen
 import com.retail.pos.ui.product.PriceCheckScreen
 import com.retail.pos.ui.payment.PrinterSettingsScreen
 import com.retail.pos.ui.session.SessionScreen
+import com.retail.pos.ui.session.PosLoginScreen
 
 object PosRoutes {
+    const val LOGIN = "login"
     const val SESSION = "session"
     const val CATALOG = "catalog"
     const val SCANNER = "scanner"
@@ -30,11 +32,27 @@ object PosRoutes {
 fun PosNavHost(navController: NavHostController = rememberNavController()) {
     NavHost(
         navController = navController,
-        startDestination = PosRoutes.SESSION
+        startDestination = PosRoutes.LOGIN
     ) {
+        composable(PosRoutes.LOGIN) {
+            PosLoginScreen(
+                onLoggedIn = {
+                    navController.navigate(PosRoutes.SESSION) {
+                        popUpTo(PosRoutes.LOGIN) { inclusive = true }
+                        launchSingleTop = true
+                    }
+                }
+            )
+        }
         composable(PosRoutes.SESSION) {
             SessionScreen(
-                onSessionOpen = { navController.navigate(PosRoutes.CATALOG) }
+                onSessionOpen = { navController.navigate(PosRoutes.CATALOG) },
+                onLogout = {
+                    navController.navigate(PosRoutes.LOGIN) {
+                        popUpTo(PosRoutes.SESSION) { inclusive = true }
+                        launchSingleTop = true
+                    }
+                }
             )
         }
         composable(PosRoutes.CATALOG) {
