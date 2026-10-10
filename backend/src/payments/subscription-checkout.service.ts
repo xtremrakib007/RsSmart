@@ -303,14 +303,25 @@ export class SubscriptionCheckoutService {
         });
         throw error;
       }
-      await this.audit.log({
-        tenantId: checkout.tenantId,
-        userId: undefined,
-        action: 'SUBSCRIPTION_CHECKOUT_SUCCEEDED',
-        entityType: 'SubscriptionCheckout',
-        entityId: checkout.id,
-        newValues: { providerReference, provider: checkout.provider },
-      });
+      // The subscription and checkout are already finalized. An audit-store
+      // outage must not turn this successful webhook into an apparent failure
+      // that triggers repeated provider deliveries; report the audit failure
+      // operationally and preserve the completed payment result.
+      try {
+        await this.audit.log({
+          tenantId: checkout.tenantId,
+          userId: undefined,
+          action: 'SUBSCRIPTION_CHECKOUT_SUCCEEDED',
+          entityType: 'SubscriptionCheckout',
+          entityId: checkout.id,
+          newValues: { providerReference, provider: checkout.provider },
+        });
+      } catch (error) {
+        this.logger.error(
+          `Audit persistence failed after subscription checkout ${checkout.id} was finalized`,
+          error instanceof Error ? error.stack : undefined,
+        );
+      }
       return { received: true, status: 'SUCCEEDED' };
     }
 
