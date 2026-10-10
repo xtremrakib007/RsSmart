@@ -30,6 +30,7 @@ describe('SubscriptionCheckoutService', () => {
       subscriptionCheckout: {
         create: jest.fn(),
         findFirst: jest.fn(),
+        findMany: jest.fn(),
         findUnique: jest.fn(),
         update: jest.fn(),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
@@ -414,6 +415,50 @@ describe('SubscriptionCheckoutService', () => {
       expect(audit.log).toHaveBeenCalledWith(
         expect.objectContaining({ tenantId, userId: undefined, action: 'SUBSCRIPTION_CHECKOUT_SUCCEEDED' }),
       );
+    });
+  });
+
+  describe('reconcilePendingBillplzCheckouts', () => {
+    it('reconciles only stored pending Billplz checkouts through the verified webhook finalizer', async () => {
+      const checkout = {
+        id: 'checkout-1',
+        tenantId,
+        subscriptionId,
+        provider: 'billplz',
+        providerReference: 'bill_abc',
+        status: 'PENDING',
+        amount: '99.00',
+        currency: 'MYR',
+        webhookProcessedAt: null,
+        webhookProcessingAt: null,
+        createdAt: new Date('2026-10-01T00:00:00Z'),
+        updatedAt: new Date('2026-10-01T00:00:00Z'),
+      };
+      prisma.subscriptionCheckout.findMany.mockResolvedValue([checkout]);
+      prisma.subscriptionCheckout.findUnique.mockResolvedValue(checkout);
+      payments.verifyPayment.mockResolvedValue({
+        status: 'SUCCEEDED',
+        amount: { amount: 9900, currency: 'MYR' },
+        paidAt: new Date(),
+      });
+
+      const result = await service.reconcilePendingBillplzCheckouts();
+
+      expect(prisma.subscriptionCheckout.findMany).toHaveBeenCalledWith({
+        where: { provider: 'billplz', status: 'PENDING', webhookProcessedAt: null },
+        orderBy: { createdAt: 'asc' },
+        take: 50,
+      });
+      expect(payments.verifyPayment).toHaveBeenCalledTimes(2);
+      expect(subscriptions.activate).toHaveBeenCalledWith(tenantId, subscriptionId, 'system:billplz-webhook');
+      expect(result).toEqual({ checked: 1, finalized: 1, stillPending: 0, failed: 0 });
+    });
+
+    it('fails closed when the Billplz signature key is missing', async () => {
+      delete process.env.BILLPLZ_X_SIGNATURE_KEY;
+
+      await expect(service.reconcilePendingBillplzCheckouts()).rejects.toThrow(BadRequestException);
+      expect(prisma.subscriptionCheckout.findMany).not.toHaveBeenCalled();
     });
   });
 });
