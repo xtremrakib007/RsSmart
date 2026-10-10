@@ -297,10 +297,19 @@ export class SubscriptionCheckoutService {
       } catch (error) {
         // Leave it retryable immediately when the operation reports failure.
         // If the process dies before this cleanup, the lease expires in 2 min.
-        await this.prisma.subscriptionCheckout.updateMany({
-          where: { id: checkout.id, webhookProcessingAt: claimedAt, webhookProcessedAt: null },
-          data: { webhookProcessingAt: null },
-        });
+        // Cleanup failure must not replace the original activation/finalization
+        // error; the stale-lease recovery path remains the fallback.
+        try {
+          await this.prisma.subscriptionCheckout.updateMany({
+            where: { id: checkout.id, webhookProcessingAt: claimedAt, webhookProcessedAt: null },
+            data: { webhookProcessingAt: null },
+          });
+        } catch (cleanupError) {
+          this.logger.error(
+            `Failed to release webhook lease for checkout ${checkout.id}; stale lease recovery will retry`,
+            cleanupError instanceof Error ? cleanupError.stack : undefined,
+          );
+        }
         throw error;
       }
       // The subscription and checkout are already finalized. An audit-store
