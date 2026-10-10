@@ -51,7 +51,7 @@ fun CartScreen(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text("Total", style = MaterialTheme.typography.titleLarge)
-                            Text("$${"%.2f".format(cartTotal)}", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
+                            Text("RM ${"%.2f".format(cartTotal)}", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
                         }
                         Spacer(modifier = Modifier.height(8.dp))
                         Button(
@@ -106,8 +106,8 @@ fun CartItemCard(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(item.productName, style = MaterialTheme.typography.titleMedium)
-                Text("$${"%.2f".format(item.unitPrice)} each", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
-                Text("Line total: $${"%.2f".format(item.lineTotal)}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+                Text("RM ${"%.2f".format(item.unitPrice)} each", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                Text("Line total: RM ${"%.2f".format(item.lineTotal)}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onDecrease) {
