@@ -4,7 +4,17 @@ plugins {
     id("com.google.dagger.hilt.android")
     id("com.google.devtools.ksp")
     id("kotlin-kapt")
-    id("com.google.gms.google-services")
+}
+
+// Firebase config is intentionally not committed to source control. Keep CI buildable
+// without private/local google-services.json; non-CI builds must supply the real config.
+val googleServicesConfig = file("google-services.json")
+if (googleServicesConfig.isFile) {
+    apply(plugin = "com.google.gms.google-services")
+} else if (System.getenv("CI") == "true") {
+    logger.warn("google-services.json is absent; Firebase runtime configuration is not included in this CI-only build.")
+} else {
+    throw GradleException("Missing app/google-services.json. Add the Firebase config for the Sales Android app before building locally or for release.")
 }
 
 android {
