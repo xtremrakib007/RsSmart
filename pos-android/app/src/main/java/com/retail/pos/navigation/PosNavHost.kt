@@ -1,6 +1,8 @@
 package com.retail.pos.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -28,10 +30,12 @@ fun PosNavHost(navController: NavHostController = rememberNavController()) {
         composable(PosRoutes.SESSION) {
             SessionScreen(onSessionOpen = { navController.navigate(PosRoutes.CATALOG) })
         }
-        composable(PosRoutes.CATALOG) {
+        composable(PosRoutes.CATALOG) { entry ->
+            val scannedBarcode by entry.savedStateHandle.getStateFlow("scanned_barcode", "").collectAsState()
             ProductCatalogScreen(
                 onNavigateToCart = { navController.navigate(PosRoutes.CART) },
                 onCheckout = { navController.navigate(PosRoutes.CHECKOUT) },
+                scannedBarcode = scannedBarcode,
                 onScanBarcode = { navController.navigate(PosRoutes.SCANNER) }
             )
         }
