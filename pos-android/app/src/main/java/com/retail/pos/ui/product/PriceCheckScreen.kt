@@ -78,7 +78,7 @@ fun PriceCheckScreen(
                             Column(Modifier.padding(16.dp)) {
                                 Text(product.name, style = MaterialTheme.typography.titleMedium)
                                 Text("SKU: ${product.sku}", style = MaterialTheme.typography.bodySmall)
-                                if (product.barcode.isNotBlank()) {
+                                if (product.barcode?.isNotBlank() == true) {
                                     Text("Barcode: ${product.barcode}", style = MaterialTheme.typography.bodySmall)
                                 }
                                 Spacer(Modifier.height(8.dp))
