@@ -77,7 +77,7 @@ class PrintService @Inject constructor(
             sb.append("[L]Customer: [R]$customer\n")
         }
         sb.append("[C]------------------------------\n")
-        sb.append("[L]<b>Total:</b>[R]<b>$${"%.2f".format(java.util.Locale.US, order.grandTotal)}</b>\n")
+        sb.append("[L]<b>Total:</b>[R]<b>RM ${"%.2f".format(java.util.Locale.US, order.grandTotal)}</b>\n")
         sb.append("[C]------------------------------\n")
         sb.append("[C]Thank you for your purchase!\n")
         sb.append("[C]\n\n\n")
