@@ -1,71 +1,28 @@
 package com.retail.pos.session
 
-import android.content.Context
-import android.provider.Settings
-import androidx.datastore.core.DataStore
-import androidx.datastore.preferences.core.Preferences
-import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
-import dagger.hilt.android.qualifiers.ApplicationContext
+import com.retail.shared.auth.PosAuthStore
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.runBlocking
 import javax.inject.Inject
 import javax.inject.Singleton
 
-private val Context.posSessionDataStore: DataStore<Preferences> by preferencesDataStore(name = "pos_session_prefs")
-
-/** Shared identity and register-session state for all POS screens. */
+/** POS-facing wrapper around the shared auth/session store. */
 @Singleton
-class PosSessionProvider @Inject constructor(@ApplicationContext context: Context) {
-    private val dataStore = context.posSessionDataStore
-    val deviceId: String = "${android.os.Build.MODEL}_${Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)}"
+class PosSessionProvider @Inject constructor(private val store: PosAuthStore) {
+    val deviceId: String = store.deviceId
+    val tenantId: Flow<String> = store.tenantId
+    val userId: Flow<String> = store.userId
+    val accessToken: Flow<String?> = store.accessToken
+    val isAuthenticated: Flow<Boolean> = store.isAuthenticated
+    val activeSessionId: Flow<String?> = store.activeSessionId
 
-    companion object {
-        private val TENANT_ID_KEY = stringPreferencesKey("tenant_id")
-        private val USER_ID_KEY = stringPreferencesKey("user_id")
-        private val ACCESS_TOKEN_KEY = stringPreferencesKey("access_token")
-        private val ACTIVE_SESSION_ID_KEY = stringPreferencesKey("active_session_id")
-    }
+    fun tenantIdBlocking(): String = store.tenantIdBlocking()
+    fun userIdBlocking(): String = store.userIdBlocking()
+    fun activeSessionIdBlocking(): String? = store.activeSessionIdBlocking()
 
-    val tenantId: Flow<String> = dataStore.data.map { it[TENANT_ID_KEY].orEmpty() }
-    val userId: Flow<String> = dataStore.data.map { it[USER_ID_KEY].orEmpty() }
-    val accessToken: Flow<String?> = dataStore.data.map { it[ACCESS_TOKEN_KEY] }
-    val isAuthenticated: Flow<Boolean> = dataStore.data.map {
-        !it[ACCESS_TOKEN_KEY].isNullOrBlank() &&
-            !it[TENANT_ID_KEY].isNullOrBlank() &&
-            !it[USER_ID_KEY].isNullOrBlank()
-    }
-    val activeSessionId: Flow<String?> = dataStore.data.map { it[ACTIVE_SESSION_ID_KEY] }
+    suspend fun setIdentity(tenantId: String, userId: String, accessToken: String) =
+        store.setIdentity(tenantId, userId, accessToken)
 
-    fun tenantIdBlocking(): String = runBlocking { tenantId.first() }
-    fun userIdBlocking(): String = runBlocking { userId.first() }
-    fun activeSessionIdBlocking(): String? = runBlocking { activeSessionId.first() }
-
-    suspend fun setIdentity(tenantId: String, userId: String, accessToken: String) {
-        dataStore.edit { prefs ->
-            prefs[TENANT_ID_KEY] = tenantId
-            prefs[USER_ID_KEY] = userId
-            prefs[ACCESS_TOKEN_KEY] = accessToken
-        }
-    }
-
-    suspend fun clearIdentity() {
-        dataStore.edit { prefs ->
-            prefs.remove(TENANT_ID_KEY)
-            prefs.remove(USER_ID_KEY)
-            prefs.remove(ACCESS_TOKEN_KEY)
-            prefs.remove(ACTIVE_SESSION_ID_KEY)
-        }
-    }
-
-    suspend fun setActiveSession(sessionId: String) {
-        dataStore.edit { prefs -> prefs[ACTIVE_SESSION_ID_KEY] = sessionId }
-    }
-
-    suspend fun clearActiveSession() {
-        dataStore.edit { prefs -> prefs.remove(ACTIVE_SESSION_ID_KEY) }
-    }
+    suspend fun clearIdentity() = store.clearIdentity()
+    suspend fun setActiveSession(sessionId: String) = store.setActiveSession(sessionId)
+    suspend fun clearActiveSession() = store.clearActiveSession()
 }
