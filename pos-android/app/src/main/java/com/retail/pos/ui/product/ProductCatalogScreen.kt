@@ -123,7 +123,7 @@ fun ProductCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    "$${"%.2f".format(product.unitPrice)}",
+                    "RM ${"%.2f".format(product.unitPrice)}",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.primary
                 )
