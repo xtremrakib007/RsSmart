@@ -5,6 +5,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Logout
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,6 +38,7 @@ private fun formatRinggit(sen: Long): String =
 @Composable
 fun SessionScreen(
     onSessionOpen: () -> Unit,
+    onLogout: () -> Unit,
     viewModel: SessionViewModel = hiltViewModel()
 ) {
     val openSession by viewModel.openSession.collectAsState()
@@ -66,12 +69,28 @@ fun SessionScreen(
                 closingCounts.clear()
                 closingNotes = ""
             }
+            is SessionViewModel.SessionAction.LoggedOut -> {
+                viewModel.resetAction()
+                onLogout()
+            }
             else -> Unit
         }
     }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Cashier Shift") }) }
+        topBar = {
+            TopAppBar(
+                title = { Text("Cashier Shift") },
+                actions = {
+                    IconButton(
+                        onClick = { viewModel.logout() },
+                        enabled = openSession == null
+                    ) {
+                        Icon(Icons.Default.Logout, contentDescription = "Sign out")
+                    }
+                }
+            )
+        }
     ) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
