@@ -25,11 +25,19 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.ViewModel
+import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.retail.pos.service.printer.PrintService
 import com.retail.shared.data.local.entity.PosOrder
 import kotlinx.coroutines.launch
 import java.util.UUID
+
+@HiltViewModel
+class PrinterSettingsViewModel @Inject constructor(
+    val printService: PrintService
+) : ViewModel()
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
