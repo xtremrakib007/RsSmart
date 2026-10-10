@@ -92,6 +92,10 @@ fun SessionScreen(
                             Text("Transactions: ${openSession!!.transactionCount}")
                             Spacer(Modifier.height(4.dp))
                             Button(
+                                onClick = onSessionOpen,
+                                modifier = Modifier.fillMaxWidth()
+                            ) { Text("Continue to register") }
+                            OutlinedButton(
                                 onClick = { showCloseDialog = true },
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
