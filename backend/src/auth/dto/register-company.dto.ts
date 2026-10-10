@@ -1,4 +1,4 @@
-import { IsEmail, IsString, IsNotEmpty, MinLength } from 'class-validator';
+import { IsEmail, IsString, IsNotEmpty, MinLength, IsArray, ArrayNotEmpty, ArrayUnique } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 // Replaces the old RegisterDto for the public endpoint. Deliberately has NO
@@ -25,6 +25,13 @@ export class RegisterCompanyDto {
   @IsString()
   @IsNotEmpty()
   firstName: string;
+
+  @ApiProperty({ description: 'Every currently required policy key returned by GET /legal-policies' })
+  @IsArray()
+  @ArrayNotEmpty()
+  @ArrayUnique()
+  @IsString({ each: true })
+  acceptedPolicyKeys: string[];
 
   @ApiProperty({ example: 'Doe' })
   @IsString()

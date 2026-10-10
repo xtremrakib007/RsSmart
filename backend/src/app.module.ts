@@ -31,6 +31,7 @@ import { EntitlementsModule } from './entitlements/entitlements.module';
 import { InvitationsModule } from './invitations/invitations.module';
 import { PaymentsModule } from './payments/payments.module';
 import { BillingModule } from './billing/billing.module';
+import { LegalPoliciesModule } from './legal-policies/legal-policies.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
@@ -67,6 +68,7 @@ import { PermissionsGuard } from './common/guards/permissions.guard';
     EntitlementsModule,
     PaymentsModule,
     BillingModule,
+    LegalPoliciesModule,
     AuthModule,
     UsersModule,
     InvitationsModule,

@@ -107,7 +107,7 @@ export class MetaCloudWhatsAppProvider implements WhatsAppProvider {
     if (!account.phoneNumberId) throw new ServiceUnavailableException('WhatsApp phoneNumberId is required');
 
     const formData = new FormData();
-    formData.append('file', new Blob([file], { type: mimeType }), 'file');
+    formData.append('file', new Blob([new Uint8Array(file)], { type: mimeType }), 'file');
     formData.append('messaging_product', 'whatsapp');
 
     const response = await fetch(`${this.baseUrl}/${encodeURIComponent(account.phoneNumberId)}/media`, {

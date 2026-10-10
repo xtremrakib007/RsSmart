@@ -2,7 +2,8 @@
 // Central Database Schema for Multi-Tenant Business System
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["omitApi"]
 }
 
 datasource db {
@@ -66,6 +67,7 @@ model Tenant {
   subscriptions Subscription[]
   invitations Invitation[]
   subscriptionCheckouts SubscriptionCheckout[]
+  policyAcceptances PolicyAcceptance[]
 
   @@map("tenants")
 }
@@ -105,6 +107,7 @@ model User {
   attendanceRecords AttendanceRecord[] @relation("AttendanceUser")
   whatsappAutomationRules WhatsAppAutomationRule[] @relation("WhatsAppAutomationCreatedBy")
   invitationsSent Invitation[] @relation("InvitationInvitedBy")
+  policyAcceptances PolicyAcceptance[]
   // Note: WhatsAppMessage.createdBy is intentionally a plain nullable String,
   // not a relation (same unenforced "actor" pattern as
   // StockMovement.createdBy / PosCashMovement.createdBy — it can be null
@@ -644,6 +647,7 @@ model SyncEvent {
   payload        Json
   vectorClock    Json     @map("vector_clock") // { "device_123": 45, "server": 120 }
   status         SyncStatus @default(PENDING)
+  attempts       Int      @default(0)
   processedAt    DateTime? @map("processed_at")
   error          String?
   createdAt      DateTime @default(now()) @map("created_at")
@@ -731,6 +735,7 @@ model WhatsAppAccount {
   provider          String   @default("MOCK")
   providerAccountId String?  @map("provider_account_id")
   phoneNumberId     String?  @map("phone_number_id")
+  accessTokenEncrypted String? @map("access_token_encrypted")
   createdByUserId   String?  @map("created_by_user_id")
   status            WhatsAppAccountStatus @default(DISCONNECTED)
   webhookUrl        String?  @map("webhook_url")
@@ -1160,6 +1165,28 @@ model SubscriptionCheckout {
 
   @@index([tenantId, createdAt])
   @@map("subscription_checkouts")
+}
+
+// ─── LEGAL: Immutable policy acceptance evidence ───────────────────────────
+model PolicyAcceptance {
+  id             String   @id @default(uuid())
+  tenantId       String   @map("tenant_id")
+  userId         String   @map("user_id")
+  policyKey      String   @map("policy_key")
+  policyTitle    String   @map("policy_title")
+  policyVersion  String   @map("policy_version")
+  contentHash    String   @map("content_hash")
+  action         String
+  flow           String
+  subscriptionId String?  @map("subscription_id")
+  acceptedAt     DateTime @default(now()) @map("accepted_at")
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  user           User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, userId, policyKey, policyVersion, flow, subscriptionId])
+  @@index([tenantId, acceptedAt])
+  @@index([tenantId, subscriptionId])
+  @@map("policy_acceptances")
 }
 
 // ─── ENUMS ─────────────────────────────────────────────────
