@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -21,6 +22,9 @@ import com.retail.shared.data.local.entity.Product
 fun ProductCatalogScreen(
     onNavigateToCart: () -> Unit,
     onCheckout: () -> Unit,
+    onScanBarcode: () -> Unit,
+    onCustomers: () -> Unit,
+    scannedBarcode: String? = null,
     viewModel: CartViewModel = hiltViewModel()
 ) {
     val products by viewModel.products.collectAsState()
@@ -28,14 +32,24 @@ fun ProductCatalogScreen(
     val itemCount by viewModel.itemCount.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
 
+    LaunchedEffect(scannedBarcode) {
+        if (!scannedBarcode.isNullOrBlank()) viewModel.setSearchQuery(scannedBarcode)
+    }
+
     // Session ID now comes from CartViewModel, which reads it from PosSessionProvider —
     // the same active session SessionViewModel opened, no per-screen placeholder needed.
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Product Catalog") },
+                title = { Text("RsSmart POS") },
                 actions = {
+                    IconButton(onClick = onCustomers) {
+                        Icon(Icons.Default.People, contentDescription = "Customers")
+                    }
+                    IconButton(onClick = onScanBarcode) {
+                        Icon(Icons.Default.QrCodeScanner, contentDescription = "Scan product barcode")
+                    }
                     BadgedBox(
                         badge = {
                             if (itemCount > 0) {
@@ -70,7 +84,7 @@ fun ProductCatalogScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp),
-                placeholder = { Text("Search by name, SKU, or barcode...") },
+                placeholder = { Text("Search products, SKU or barcode / Price check") },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                 singleLine = true
             )

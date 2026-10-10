@@ -29,6 +29,12 @@ class SessionViewModel @Inject constructor(
         viewModelScope.launch {
             _sessionAction.value = SessionAction.Processing
             try {
+                val tenantId = sessionProvider.tenantId.first()
+                val userId = sessionProvider.userId.first()
+                if (tenantId.isBlank() || userId.isBlank()) {
+                    _sessionAction.value = SessionAction.Error("Sign in with your company account before opening a shift.")
+                    return@launch
+                }
                 val existing = sessionDao.getOpenSessionOnce(deviceId)
                 if (existing != null) {
                     sessionProvider.setActiveSession(existing.id)
@@ -38,8 +44,8 @@ class SessionViewModel @Inject constructor(
 
                 val session = PosSession(
                     id = UUID.randomUUID().toString(),
-                    tenantId = sessionProvider.tenantId.first(),
-                    userId = sessionProvider.userId.first(),
+                    tenantId = tenantId,
+                    userId = userId,
                     deviceId = deviceId,
                     openingCash = openingCash,
                     openedAt = System.currentTimeMillis(),

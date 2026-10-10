@@ -60,7 +60,7 @@ fun CheckoutScreen(
                         items(cartItems) { item ->
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text("${item.productName} x${item.quantity.toInt()}")
-                                Text("$${"%.2f".format(item.lineTotal)}")
+                                Text("RM ${"%.2f".format(item.lineTotal)}")
                             }
                         }
                     }
@@ -119,7 +119,7 @@ fun SummaryRow(label: String, amount: Double, isTotal: Boolean = false) {
             style = if (isTotal) MaterialTheme.typography.titleLarge else MaterialTheme.typography.bodyLarge
         )
         Text(
-            "$${"%.2f".format(amount)}",
+            "RM ${"%.2f".format(amount)}",
             style = if (isTotal) MaterialTheme.typography.titleLarge else MaterialTheme.typography.bodyLarge,
             color = if (isTotal) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
         )

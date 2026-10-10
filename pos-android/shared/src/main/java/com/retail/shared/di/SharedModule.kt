@@ -27,6 +27,7 @@ object SharedModule {
             RetailDatabase::class.java,
             "retail_database"
         )
+            .addMigrations(RetailDatabase.MIGRATION_1_2)
             .fallbackToDestructiveMigration()
             .build()
     }
@@ -43,6 +44,8 @@ object SharedModule {
     fun provideOfflineQueueDao(db: RetailDatabase) = db.offlineQueueDao()
     @Provides
     fun providePaymentDao(db: RetailDatabase) = db.paymentDao()
+    @Provides
+    fun provideCustomerDao(db: RetailDatabase) = db.customerDao()
 
     @Provides
     @Singleton
