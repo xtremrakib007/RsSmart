@@ -1,10 +1,8 @@
 package com.retail.pos.navigation
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -14,9 +12,11 @@ import com.retail.pos.ui.checkout.CheckoutScreen
 import com.retail.pos.ui.payment.PaymentScreen
 import com.retail.pos.ui.product.BarcodeScannerScreen
 import com.retail.pos.ui.product.ProductCatalogScreen
+import com.retail.pos.ui.session.LoginScreen
 import com.retail.pos.ui.session.SessionScreen
 
 object PosRoutes {
+    const val LOGIN = "login"
     const val SESSION = "session"
     const val CATALOG = "catalog"
     const val CART = "cart"
@@ -28,7 +28,14 @@ object PosRoutes {
 
 @Composable
 fun PosNavHost(navController: NavHostController = rememberNavController()) {
-    NavHost(navController = navController, startDestination = PosRoutes.SESSION) {
+    NavHost(navController = navController, startDestination = PosRoutes.LOGIN) {
+        composable(PosRoutes.LOGIN) {
+            LoginScreen(onLoginSuccess = {
+                navController.navigate(PosRoutes.SESSION) {
+                    popUpTo(PosRoutes.LOGIN) { inclusive = true }
+                }
+            })
+        }
         composable(PosRoutes.SESSION) {
             SessionScreen(onSessionOpen = { navController.navigate(PosRoutes.CATALOG) })
         }
