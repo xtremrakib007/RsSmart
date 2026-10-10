@@ -43,7 +43,12 @@ fun PosNavHost(navController: NavHostController = rememberNavController()) {
         }
         composable(PosRoutes.SESSION) {
             SessionScreen(
-                onSessionOpen = { navController.navigate(PosRoutes.CATALOG) }
+                onSessionOpen = { navController.navigate(PosRoutes.CATALOG) },
+                onLogout = {
+                    navController.navigate(PosRoutes.LOGIN) {
+                        popUpTo(PosRoutes.SESSION) { inclusive = true }
+                    }
+                }
             )
         }
         composable(PosRoutes.CATALOG) {
