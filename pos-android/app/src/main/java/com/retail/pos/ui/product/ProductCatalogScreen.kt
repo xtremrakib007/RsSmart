@@ -12,6 +12,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.retail.pos.viewmodel.CartViewModel
 import com.retail.shared.data.local.entity.Product
@@ -21,12 +23,26 @@ import com.retail.shared.data.local.entity.Product
 fun ProductCatalogScreen(
     onNavigateToCart: () -> Unit,
     onCheckout: () -> Unit,
+    onScanBarcode: () -> Unit,
+    onPriceCheck: () -> Unit,
+    onPrinterSettings: () -> Unit,
+    onCustomers: () -> Unit,
+    navController: NavHostController,
     viewModel: CartViewModel = hiltViewModel()
 ) {
     val products by viewModel.products.collectAsState()
     val cartItems by viewModel.cartItems.collectAsState()
     val itemCount by viewModel.itemCount.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
+    val currentEntry by navController.currentBackStackEntryAsState()
+    val scannedBarcode = currentEntry?.savedStateHandle?.get<String>("scannedBarcode")
+
+    LaunchedEffect(scannedBarcode) {
+        if (!scannedBarcode.isNullOrBlank()) {
+            viewModel.setSearchQuery(scannedBarcode)
+            currentEntry?.savedStateHandle?.set("scannedBarcode", "")
+        }
+    }
 
     // Session ID now comes from CartViewModel, which reads it from PosSessionProvider —
     // the same active session SessionViewModel opened, no per-screen placeholder needed.
@@ -36,6 +52,14 @@ fun ProductCatalogScreen(
             TopAppBar(
                 title = { Text("Product Catalog") },
                 actions = {
+                    TextButton(onClick = onPriceCheck) { Text("Price check") }
+                    TextButton(onClick = onPrinterSettings) { Text("Printer") }
+                    IconButton(onClick = onCustomers) {
+                        Icon(Icons.Default.Person, contentDescription = "Customers")
+                    }
+                    IconButton(onClick = onScanBarcode) {
+                        Icon(Icons.Default.CameraAlt, contentDescription = "Scan barcode")
+                    }
                     BadgedBox(
                         badge = {
                             if (itemCount > 0) {
@@ -123,7 +147,7 @@ fun ProductCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    "$${"%.2f".format(product.unitPrice)}",
+                    "RM ${"%.2f".format(product.unitPrice)}",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.primary
                 )

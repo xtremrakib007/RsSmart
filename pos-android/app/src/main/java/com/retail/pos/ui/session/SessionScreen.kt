@@ -10,18 +10,24 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.retail.pos.viewmodel.SessionViewModel
+import com.retail.pos.viewmodel.PosLoginViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SessionScreen(
     onSessionOpen: () -> Unit,
-    viewModel: SessionViewModel = hiltViewModel()
+    onLogout: () -> Unit,
+    viewModel: SessionViewModel = hiltViewModel(),
+    authViewModel: PosLoginViewModel = hiltViewModel()
 ) {
     val openSession by viewModel.openSession.collectAsState()
     val action by viewModel.sessionAction.collectAsState()
 
-    var openingCash by remember { mutableStateOf("") }
-    var closingCash by remember { mutableStateOf("") }
+    val denominations = listOf(100.0, 50.0, 20.0, 10.0, 5.0, 1.0, 0.50, 0.20, 0.10, 0.05)
+    val openingCounts = remember { mutableStateMapOf<Double, String>() }
+    val closingCounts = remember { mutableStateMapOf<Double, String>() }
+    val openingCash = denominations.sumOf { denomination -> denomination * (openingCounts[denomination]?.toIntOrNull() ?: 0) }
+    val closingCash = denominations.sumOf { denomination -> denomination * (closingCounts[denomination]?.toIntOrNull() ?: 0) }
     var notes by remember { mutableStateOf("") }
     var showCloseDialog by remember { mutableStateOf(false) }
 
@@ -41,7 +47,16 @@ fun SessionScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text("POS Session") })
+            TopAppBar(
+                title = { Text("POS Session") },
+                actions = {
+                    if (openSession == null) {
+                        TextButton(onClick = { authViewModel.logout(onLogout) }) {
+                            Text("Sign out")
+                        }
+                    }
+                }
+            )
         }
     ) { padding ->
         Box(
@@ -73,13 +88,25 @@ fun SessionScreen(
                     Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("Open Session", style = MaterialTheme.typography.headlineMedium)
                         Spacer(modifier = Modifier.height(16.dp))
-                        OutlinedTextField(
-                            value = openingCash,
-                            onValueChange = { openingCash = it },
-                            label = { Text("Opening Cash") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                        Text("Opening cash count (RM)", style = MaterialTheme.typography.titleMedium)
+                        Text("Count each denomination. The total is calculated automatically.", style = MaterialTheme.typography.bodySmall)
+                        denominations.chunked(2).forEach { pair ->
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                                pair.forEach { denomination ->
+                                    OutlinedTextField(
+                                        value = openingCounts[denomination] ?: "",
+                                        onValueChange = { value -> openingCounts[denomination] = value.filter(Char::isDigit).take(5) },
+                                        label = { Text("RM ${"%.2f".format(denomination)} ×") },
+                                        suffix = { Text("RM ${"%.2f".format(denomination * (openingCounts[denomination]?.toIntOrNull() ?: 0))}") },
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                        modifier = Modifier.weight(1f),
+                                        singleLine = true
+                                    )
+                                }
+                                if (pair.size == 1) Spacer(Modifier.weight(1f))
+                            }
+                        }
+                        Text("Opening total: RM ${"%.2f".format(openingCash)}", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
                         Spacer(modifier = Modifier.height(8.dp))
                         OutlinedTextField(
                             value = notes,
@@ -90,8 +117,12 @@ fun SessionScreen(
                         Spacer(modifier = Modifier.height(16.dp))
                         Button(
                             onClick = {
-                                val cash = openingCash.toDoubleOrNull() ?: 0.0
-                                viewModel.openSession(cash, notes)
+                                val breakdown = denominations.joinToString(", ") { denomination ->
+                                    String.format(java.util.Locale.US, "RM %.2f x %d", denomination, openingCounts[denomination]?.toIntOrNull() ?: 0)
+                                }
+                                val evidence = listOf(notes.trim(), "Opening denomination count: $breakdown")
+                                    .filter { it.isNotBlank() }.joinToString("\n")
+                                viewModel.openSession(openingCash, evidence)
                             },
                             modifier = Modifier.fillMaxWidth(),
                             enabled = action !is SessionViewModel.SessionAction.Processing
@@ -114,13 +145,23 @@ fun SessionScreen(
             title = { Text("Close Session") },
             text = {
                 Column {
-                    OutlinedTextField(
-                        value = closingCash,
-                        onValueChange = { closingCash = it },
-                        label = { Text("Closing Cash") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    Text("Count closing cash (RM)", style = MaterialTheme.typography.titleMedium)
+                    denominations.chunked(2).forEach { pair ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                            pair.forEach { denomination ->
+                                OutlinedTextField(
+                                    value = closingCounts[denomination] ?: "",
+                                    onValueChange = { value -> closingCounts[denomination] = value.filter(Char::isDigit).take(5) },
+                                    label = { Text("RM ${"%.2f".format(denomination)} ×") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true
+                                )
+                            }
+                            if (pair.size == 1) Spacer(Modifier.weight(1f))
+                        }
+                    }
+                    Text("Closing total: RM ${"%.2f".format(closingCash)}", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
                         value = notes,
@@ -132,8 +173,12 @@ fun SessionScreen(
             },
             confirmButton = {
                 Button(onClick = {
-                    val cash = closingCash.toDoubleOrNull() ?: 0.0
-                    viewModel.closeSession(cash, notes)
+                    val breakdown = denominations.joinToString(", ") { denomination ->
+                        String.format(java.util.Locale.US, "RM %.2f x %d", denomination, closingCounts[denomination]?.toIntOrNull() ?: 0)
+                    }
+                    val evidence = listOf(notes.trim(), "Closing denomination count: $breakdown")
+                        .filter { it.isNotBlank() }.joinToString("\n")
+                    viewModel.closeSession(closingCash, evidence)
                 }) {
                     Text("Close")
                 }

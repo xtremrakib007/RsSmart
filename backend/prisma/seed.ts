@@ -23,6 +23,7 @@ async function main() {
     },
   });
   console.log(`✅ Tenant created: ${tenant.name}`);
+  console.log(`   Tenant ID (required by mobile login): ${tenant.id}`);
 
   // ─── ROLES ──────────────────────────────────────────────
   const roles = await prisma.role.createMany({
