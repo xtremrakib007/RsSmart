@@ -14,6 +14,7 @@ import com.retail.pos.ui.product.PriceCheckScreen
 import com.retail.pos.ui.payment.PrinterSettingsScreen
 import com.retail.pos.ui.session.SessionScreen
 import com.retail.pos.ui.session.PosLoginScreen
+import com.retail.pos.ui.customer.CustomerScreen
 
 object PosRoutes {
     const val LOGIN = "login"
@@ -22,6 +23,7 @@ object PosRoutes {
     const val SCANNER = "scanner"
     const val PRICE_CHECK = "price-check"
     const val PRINTER = "printer"
+    const val CUSTOMERS = "customers"
     const val CART = "cart"
     const val CHECKOUT = "checkout"
     const val PAYMENT = "payment/{orderId}"
@@ -62,6 +64,7 @@ fun PosNavHost(navController: NavHostController = rememberNavController()) {
                 onScanBarcode = { navController.navigate(PosRoutes.SCANNER) },
                 onPriceCheck = { navController.navigate(PosRoutes.PRICE_CHECK) },
                 onPrinterSettings = { navController.navigate(PosRoutes.PRINTER) },
+                onCustomers = { navController.navigate(PosRoutes.CUSTOMERS) },
                 navController = navController
             )
         }
@@ -70,6 +73,9 @@ fun PosNavHost(navController: NavHostController = rememberNavController()) {
         }
         composable(PosRoutes.PRINTER) {
             PrinterSettingsScreen(onBack = { navController.popBackStack() })
+        }
+        composable(PosRoutes.CUSTOMERS) {
+            CustomerScreen(onBack = { navController.popBackStack() })
         }
         composable(PosRoutes.SCANNER) {
             BarcodeScannerScreen(
