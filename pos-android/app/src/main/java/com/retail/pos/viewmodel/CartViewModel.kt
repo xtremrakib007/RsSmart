@@ -57,6 +57,58 @@ class CartViewModel @Inject constructor(
         _searchQuery.value = query
     }
 
+    fun createProduct(
+        name: String,
+        sku: String,
+        barcode: String?,
+        unitPrice: Double,
+        costPrice: Double?,
+        stockQuantity: Double,
+        taxPercent: Double,
+        unitOfMeasure: String,
+        onResult: (String?) -> Unit
+    ) {
+        viewModelScope.launch {
+            try {
+                val tenantId = sessionProvider.tenantId.first()
+                if (tenantId.isBlank()) {
+                    onResult("Please sign in before adding products.")
+                    return@launch
+                }
+                if (name.isBlank() || sku.isBlank()) {
+                    onResult("Product name and SKU are required.")
+                    return@launch
+                }
+                if (unitPrice < 0 || stockQuantity < 0 || taxPercent < 0 || taxPercent > 100) {
+                    onResult("Price, stock and tax values are invalid.")
+                    return@launch
+                }
+                productDao.insert(
+                    Product(
+                        id = UUID.randomUUID().toString(),
+                        sku = sku.trim().uppercase(),
+                        barcode = barcode?.trim()?.takeIf { it.isNotEmpty() },
+                        name = name.trim(),
+                        description = null,
+                        categoryId = null,
+                        unitPrice = unitPrice,
+                        costPrice = costPrice,
+                        taxRate = taxPercent / 100.0,
+                        stockQuantity = stockQuantity,
+                        unitOfMeasure = unitOfMeasure.trim().ifBlank { "PCS" }.uppercase(),
+                        isActive = true,
+                        imageUrl = null,
+                        tenantId = tenantId,
+                        syncStatus = "PENDING"
+                    )
+                )
+                onResult(null)
+            } catch (_: Exception) {
+                onResult("Could not save product. Check whether the SKU or barcode is already in use.")
+            }
+        }
+    }
+
     fun addToCart(product: Product, quantity: Double = 1.0) {
         viewModelScope.launch {
             val sid = sessionId.value
