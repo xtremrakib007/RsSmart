@@ -75,7 +75,8 @@ class LoginViewModel @Inject constructor(
                             val message = runCatching { JSONObject(body).optString("message") }.getOrNull()
                             throw IllegalStateException(message?.takeIf { it.isNotBlank() } ?: "Login failed (HTTP $status). Check credentials and tenant ID.")
                         }
-                        val json = JSONObject(body)
+                        val envelope = JSONObject(body)
+                        val json = envelope.optJSONObject("data") ?: envelope
                         val user = json.getJSONObject("user")
                         val token = json.getString("accessToken")
                         LoginResult(token, user.getString("tenantId"), user.getString("id"), user.optString("email", email))
