@@ -380,6 +380,7 @@ describe('SubscriptionCheckoutService', () => {
         paidAt: new Date(),
       });
       subscriptions.activate.mockRejectedValue(new Error('temporary database failure'));
+      prisma.subscriptionCheckout.updateMany.mockResolvedValueOnce({ count: 1 }).mockRejectedValueOnce(new Error('lease cleanup failure'));
 
       await expect(service.handleBillplzWebhook({ ...fields, x_signature })).rejects.toThrow(
         'temporary database failure',
