@@ -23,6 +23,7 @@ fun ProductCatalogScreen(
     onCheckout: () -> Unit,
     onScanBarcode: () -> Unit,
     onPriceCheck: () -> Unit,
+    onReturns: () -> Unit,
     viewModel: CartViewModel = hiltViewModel()
 ) {
     val products by viewModel.products.collectAsState()
@@ -43,6 +44,9 @@ fun ProductCatalogScreen(
                     }
                     IconButton(onClick = onPriceCheck) {
                         Icon(Icons.Default.PriceCheck, contentDescription = "Price check")
+                    }
+                    IconButton(onClick = onReturns) {
+                        Icon(Icons.Default.ReceiptLong, contentDescription = "Returns and refunds")
                     }
                     BadgedBox(
                         badge = {
