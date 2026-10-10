@@ -10,12 +10,15 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.retail.pos.viewmodel.SessionViewModel
+import com.retail.pos.viewmodel.PosLoginViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SessionScreen(
     onSessionOpen: () -> Unit,
-    viewModel: SessionViewModel = hiltViewModel()
+    onLogout: () -> Unit,
+    viewModel: SessionViewModel = hiltViewModel(),
+    authViewModel: PosLoginViewModel = hiltViewModel()
 ) {
     val openSession by viewModel.openSession.collectAsState()
     val action by viewModel.sessionAction.collectAsState()
@@ -44,7 +47,16 @@ fun SessionScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text("POS Session") })
+            TopAppBar(
+                title = { Text("POS Session") },
+                actions = {
+                    if (openSession == null) {
+                        TextButton(onClick = { authViewModel.logout(onLogout) }) {
+                            Text("Sign out")
+                        }
+                    }
+                }
+            )
         }
     ) { padding ->
         Box(
