@@ -13,8 +13,10 @@ import com.retail.pos.ui.payment.PaymentScreen
 import com.retail.pos.ui.product.ProductCatalogScreen
 import com.retail.pos.ui.product.BarcodeScannerScreen
 import com.retail.pos.ui.session.SessionScreen
+import com.retail.pos.ui.session.LoginScreen
 
 object PosRoutes {
+    const val LOGIN = "login"
     const val SESSION = "session"
     const val CATALOG = "catalog"
     const val CART = "cart"
@@ -28,8 +30,17 @@ object PosRoutes {
 fun PosNavHost(navController: NavHostController = rememberNavController()) {
     NavHost(
         navController = navController,
-        startDestination = PosRoutes.SESSION
+        startDestination = PosRoutes.LOGIN
     ) {
+        composable(PosRoutes.LOGIN) {
+            LoginScreen(
+                onLoginSuccess = {
+                    navController.navigate(PosRoutes.SESSION) {
+                        popUpTo(PosRoutes.LOGIN) { inclusive = true }
+                    }
+                }
+            )
+        }
         composable(PosRoutes.SESSION) {
             SessionScreen(
                 onSessionOpen = { navController.navigate(PosRoutes.CATALOG) }
