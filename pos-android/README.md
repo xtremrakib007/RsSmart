@@ -42,10 +42,20 @@ pos-android/
 ```
 
 ## Setup
-1. Open in Android Studio Hedgehog or later
-2. Sync Gradle
-3. Update `SyncApi` base URL in `SharedModule.kt`
-4. Run on Android 8+ device with USB/Bluetooth printer for full features
+1. Open in Android Studio Hedgehog or later and sync Gradle.
+2. Deploy the RsSmart NestJS backend and configure its database, JWT secrets, and HTTPS URL first.
+3. Set the backend origin when building: `RSSMART_API_BASE_URL=https://your-api-host.example/` in the build environment, or pass `-PrssmartApiBaseUrl=https://your-api-host.example/` to Gradle. The URL must be the origin/root URL and must end with `/`.
+4. The staff login requires the backend's company tenant ID, email, and password. There are no safe hard-coded demo credentials.
+5. Run on Android 8+; grant camera permission for barcode scanning and pair a compatible ESC/POS printer for receipt printing.
+6. The CI build uses a placeholder API URL unless the workflow is configured with the deployed URL, so that APK cannot sign in until configured.
+
+## Malaysian retail workflow notes
+- Cashier sign-in is the first screen; a shift cannot be opened using placeholder tenant/user identities.
+- Opening and closing float counts support RM100, RM50, RM20, RM10, RM5, RM1 notes and 50/20/10/5 sen coins.
+- Prices are shown in Malaysian ringgit (RM).
+- The barcode button opens CameraX/ML Kit scanning and returns the scanned value to the product/price search.
+- DuitNow QR and card terminal transactions must not be marked paid merely because the cashier selected a method. Connect an approved provider/terminal and verify its payment result before production use.
+- MyInvois/e-Invoice, SST rules, receipt numbering, and company tax details must be configured and verified against the merchant's actual obligations before production use.
 
 ## Key Features Implemented
 - [x] Shared Kotlin library with Sales App

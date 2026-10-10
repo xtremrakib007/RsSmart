@@ -41,13 +41,10 @@ class PosSessionProvider @Inject constructor(@ApplicationContext context: Contex
         private val USER_ID_KEY = stringPreferencesKey("user_id")
         private val ACTIVE_SESSION_ID_KEY = stringPreferencesKey("active_session_id")
 
-        // Used only until real auth/provisioning is wired up (see MISSING-FEATURE-PRD).
-        private const val DEFAULT_TENANT_ID = "tenant-1"
-        private const val DEFAULT_USER_ID = "user-001"
     }
 
-    val tenantId: Flow<String> = dataStore.data.map { it[TENANT_ID_KEY] ?: DEFAULT_TENANT_ID }
-    val userId: Flow<String> = dataStore.data.map { it[USER_ID_KEY] ?: DEFAULT_USER_ID }
+    val tenantId: Flow<String> = dataStore.data.map { it[TENANT_ID_KEY] ?: "" }
+    val userId: Flow<String> = dataStore.data.map { it[USER_ID_KEY] ?: "" }
     val activeSessionId: Flow<String?> = dataStore.data.map { it[ACTIVE_SESSION_ID_KEY] }
 
     fun tenantIdBlocking(): String = runBlocking { tenantId.first() }
@@ -58,6 +55,14 @@ class PosSessionProvider @Inject constructor(@ApplicationContext context: Contex
         dataStore.edit { prefs ->
             prefs[TENANT_ID_KEY] = tenantId
             prefs[USER_ID_KEY] = userId
+        }
+    }
+
+    suspend fun clearIdentity() {
+        dataStore.edit { prefs ->
+            prefs.remove(TENANT_ID_KEY)
+            prefs.remove(USER_ID_KEY)
+            prefs.remove(ACTIVE_SESSION_ID_KEY)
         }
     }
 

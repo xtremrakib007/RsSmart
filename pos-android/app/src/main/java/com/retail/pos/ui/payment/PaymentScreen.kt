@@ -47,7 +47,7 @@ fun PaymentScreen(
             Text("Payment Successful!", style = MaterialTheme.typography.headlineMedium)
             Spacer(modifier = Modifier.height(8.dp))
             Text("Receipt: ${order?.receiptNumber ?: "N/A"}", style = MaterialTheme.typography.titleMedium)
-            Text("Total: $${"%.2f".format(order?.grandTotal ?: 0.0)}", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
+            Text("Total: RM ${"%.2f".format(order?.grandTotal ?: 0.0)}", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
             Spacer(modifier = Modifier.height(32.dp))
 
             if (printState is PrintService.PrintState.Printing) {

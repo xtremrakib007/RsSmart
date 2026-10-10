@@ -3,6 +3,9 @@ package com.retail.shared.di
 import android.content.Context
 import androidx.room.Room
 import com.retail.shared.data.local.database.RetailDatabase
+import com.retail.shared.auth.AuthApi
+import com.retail.shared.auth.AuthSessionStore
+import com.retail.shared.BuildConfig
 import com.retail.shared.sync.SyncApi
 import dagger.Module
 import dagger.Provides
@@ -46,11 +49,23 @@ object SharedModule {
 
     @Provides
     @Singleton
-    fun provideOkHttpClient(): OkHttpClient {
+    fun provideOkHttpClient(authSessionStore: AuthSessionStore): OkHttpClient {
         val logging = HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BODY
+            // Never log request bodies: login payloads contain passwords.
+            level = HttpLoggingInterceptor.Level.BASIC
         }
         return OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                val original = chain.request()
+                val token = authSessionStore.accessTokenBlocking()
+                val request = if (!token.isNullOrBlank() &&
+                    !original.url.encodedPath.endsWith("/api/auth/login")) {
+                    original.newBuilder().header("Authorization", "Bearer $token").build()
+                } else {
+                    original
+                }
+                chain.proceed(request)
+            }
             .addInterceptor(logging)
             .build()
     }
@@ -58,8 +73,11 @@ object SharedModule {
     @Provides
     @Singleton
     fun provideRetrofit(client: OkHttpClient): Retrofit {
+        val baseUrl = BuildConfig.API_BASE_URL.let {
+            if (it.endsWith("/")) it else "$it/"
+        }
         return Retrofit.Builder()
-            .baseUrl("https://api.retail.example.com/") // Replace with actual base URL
+            .baseUrl(baseUrl)
             .client(client)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
@@ -68,4 +86,8 @@ object SharedModule {
     @Provides
     @Singleton
     fun provideSyncApi(retrofit: Retrofit): SyncApi = retrofit.create(SyncApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideAuthApi(retrofit: Retrofit): AuthApi = retrofit.create(AuthApi::class.java)
 }

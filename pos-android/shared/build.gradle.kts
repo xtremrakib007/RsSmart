@@ -6,6 +6,11 @@ plugins {
     kotlin("kapt")
 }
 
+val apiBaseUrl = providers.gradleProperty("rssmartApiBaseUrl")
+    .orElse(providers.environmentVariable("RSSMART_API_BASE_URL"))
+    .orElse("https://api.retail.example.com/")
+    .get()
+
 android {
     namespace = "com.retail.shared"
     compileSdk = 34
@@ -15,6 +20,11 @@ android {
         targetSdk = 34
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles("consumer-rules.pro")
+        buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     buildTypes {
@@ -39,6 +49,9 @@ dependencies {
     // AndroidX Core
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.appcompat:appcompat:1.6.1")
+
+    // DataStore for authenticated session tokens
+    implementation("androidx.datastore:datastore-preferences:1.0.0")
 
     // Room
     implementation("androidx.room:room-runtime:2.6.1")

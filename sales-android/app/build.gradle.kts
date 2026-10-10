@@ -4,7 +4,17 @@ plugins {
     id("com.google.dagger.hilt.android")
     id("com.google.devtools.ksp")
     id("kotlin-kapt")
-    id("com.google.gms.google-services")
+}
+
+// Firebase config is private and must not be committed. CI may compile the app
+// without it; real local/release builds must provide the matching config file.
+val googleServicesConfig = file("google-services.json")
+if (googleServicesConfig.isFile) {
+    apply(plugin = "com.google.gms.google-services")
+} else if (System.getenv("CI") == "true") {
+    logger.warn("google-services.json is absent; Firebase runtime config is not included in this CI-only build.")
+} else {
+    throw GradleException("Missing app/google-services.json. Add the Firebase config before a local or release build.")
 }
 
 android {

@@ -3,6 +3,7 @@ package com.retail.pos.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.retail.pos.session.PosSessionProvider
+import com.retail.shared.auth.AuthSessionStore
 import com.retail.shared.data.local.dao.SessionDao
 import com.retail.shared.data.local.entity.PosSession
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -14,7 +15,8 @@ import javax.inject.Inject
 @HiltViewModel
 class SessionViewModel @Inject constructor(
     private val sessionDao: SessionDao,
-    private val sessionProvider: PosSessionProvider
+    private val sessionProvider: PosSessionProvider,
+    private val authSessionStore: AuthSessionStore
 ) : ViewModel() {
 
     private val deviceId = sessionProvider.deviceId
@@ -36,10 +38,17 @@ class SessionViewModel @Inject constructor(
                     return@launch
                 }
 
+                val tenantId = sessionProvider.tenantId.first()
+                val userId = sessionProvider.userId.first()
+                if (tenantId.isBlank() || userId.isBlank()) {
+                    _sessionAction.value = SessionAction.Error("Sign in with your company account before opening a cashier shift.")
+                    return@launch
+                }
+
                 val session = PosSession(
                     id = UUID.randomUUID().toString(),
-                    tenantId = sessionProvider.tenantId.first(),
-                    userId = sessionProvider.userId.first(),
+                    tenantId = tenantId,
+                    userId = userId,
                     deviceId = deviceId,
                     openingCash = openingCash,
                     openedAt = System.currentTimeMillis(),
@@ -86,6 +95,19 @@ class SessionViewModel @Inject constructor(
         }
     }
 
+    fun logout() {
+        viewModelScope.launch {
+            val session = sessionDao.getOpenSessionOnce(deviceId)
+            if (session != null) {
+                _sessionAction.value = SessionAction.Error("Close the cashier shift before signing out.")
+                return@launch
+            }
+            authSessionStore.clear()
+            sessionProvider.clearIdentity()
+            _sessionAction.value = SessionAction.LoggedOut
+        }
+    }
+
     fun resetAction() {
         _sessionAction.value = SessionAction.Idle
     }
@@ -95,6 +117,7 @@ class SessionViewModel @Inject constructor(
         object Processing : SessionAction()
         data class Opened(val sessionId: String) : SessionAction()
         object Closed : SessionAction()
+        object LoggedOut : SessionAction()
         data class Error(val message: String) : SessionAction()
     }
 }
