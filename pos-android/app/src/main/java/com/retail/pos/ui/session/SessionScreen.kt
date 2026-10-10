@@ -117,7 +117,12 @@ fun SessionScreen(
                         Spacer(modifier = Modifier.height(16.dp))
                         Button(
                             onClick = {
-                                viewModel.openSession(openingCash, notes)
+                                val breakdown = denominations.joinToString(", ") { denomination ->
+                                    String.format(java.util.Locale.US, "RM %.2f x %d", denomination, openingCounts[denomination]?.toIntOrNull() ?: 0)
+                                }
+                                val evidence = listOf(notes.trim(), "Opening denomination count: $breakdown")
+                                    .filter { it.isNotBlank() }.joinToString("\n")
+                                viewModel.openSession(openingCash, evidence)
                             },
                             modifier = Modifier.fillMaxWidth(),
                             enabled = action !is SessionViewModel.SessionAction.Processing
@@ -168,7 +173,12 @@ fun SessionScreen(
             },
             confirmButton = {
                 Button(onClick = {
-                    viewModel.closeSession(closingCash, notes)
+                    val breakdown = denominations.joinToString(", ") { denomination ->
+                        String.format(java.util.Locale.US, "RM %.2f x %d", denomination, closingCounts[denomination]?.toIntOrNull() ?: 0)
+                    }
+                    val evidence = listOf(notes.trim(), "Closing denomination count: $breakdown")
+                        .filter { it.isNotBlank() }.joinToString("\n")
+                    viewModel.closeSession(closingCash, evidence)
                 }) {
                     Text("Close")
                 }
