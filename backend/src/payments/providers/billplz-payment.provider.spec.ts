@@ -154,6 +154,24 @@ describe('BillplzPaymentProvider', () => {
       expect(result.paidAt).toBeNull();
     });
 
+    it('rejects a bill response whose ID differs from the requested reference', async () => {
+      mockFetchOnce(200, { id: 'bill_other', paid: true, amount: '5000', paid_at: '2026-08-30T10:00:00Z' });
+
+      await expect(provider.verifyPayment('bill_abc')).rejects.toThrow(ServiceUnavailableException);
+    });
+
+    it('rejects a malformed bill amount instead of treating it as a valid payment', async () => {
+      mockFetchOnce(200, { id: 'bill_abc', paid: true, amount: 'not-a-number', paid_at: null });
+
+      await expect(provider.verifyPayment('bill_abc')).rejects.toThrow(ServiceUnavailableException);
+    });
+
+    it('rejects an invalid paid_at timestamp', async () => {
+      mockFetchOnce(200, { id: 'bill_abc', paid: true, amount: '5000', paid_at: 'not-a-date' });
+
+      await expect(provider.verifyPayment('bill_abc')).rejects.toThrow(ServiceUnavailableException);
+    });
+
     it('throws NotFoundException for a 404 from Billplz', async () => {
       mockFetchOnce(404, {});
       await expect(provider.verifyPayment('bill_missing')).rejects.toThrow(NotFoundException);
