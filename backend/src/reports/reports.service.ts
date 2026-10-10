@@ -1,5 +1,22 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
+
+function parseDateRange(fromValue: string, toValue: string) {
+  if (typeof fromValue !== 'string' || typeof toValue !== 'string' || !fromValue.trim() || !toValue.trim()) {
+    throw new BadRequestException('fromDate and toDate are required');
+  }
+
+  const fromDate = new Date(fromValue);
+  const toDate = new Date(toValue);
+  if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) {
+    throw new BadRequestException('fromDate and toDate must be valid dates');
+  }
+  if (fromDate > toDate) {
+    throw new BadRequestException('fromDate must be before or equal to toDate');
+  }
+
+  return { gte: fromDate, lte: toDate };
+}
 
 @Injectable()
 export class ReportsService {
@@ -8,25 +25,29 @@ export class ReportsService {
   async salesReport(tenantId: string, filters: { fromDate: string; toDate: string; salesRepId?: string; customerId?: string }) {
     const where: any = {
       tenantId,
-      createdAt: {
-        gte: new Date(filters.fromDate),
-        lte: new Date(filters.toDate),
-      },
+      createdAt: parseDateRange(filters.fromDate, filters.toDate),
     };
     if (filters.salesRepId) where.salesRepId = filters.salesRepId;
     if (filters.customerId) where.customerId = filters.customerId;
 
     const orders = await this.prisma.order.findMany({
       where,
-      include: { items: true, payments: true, customer: true, salesRep: { omit: { password: true } } },
+      include: { items: true, payments: { select: { id: true, amount: true, method: true, createdAt: true } }, customer: { select: { id: true, name: true, category: true } }, salesRep: { select: { id: true, firstName: true, lastName: true } } },
     });
 
+    // Returned POS orders remain visible for audit, but must not inflate sales
+    // revenue. Keep grossRevenue for reconciliation and expose totalRevenue as
+    // revenue from orders that have not been returned.
+    const grossRevenue = orders.reduce((sum, o) => sum + Number(o.total), 0);
+    const saleOrders = orders.filter((o) => o.status !== 'RETURNED');
+    const netSalesRevenue = saleOrders.reduce((sum, o) => sum + Number(o.total), 0);
     const summary = {
       totalOrders: orders.length,
-      totalRevenue: orders.reduce((sum, o) => sum + Number(o.total), 0),
-      totalTax: orders.reduce((sum, o) => sum + Number(o.taxAmount), 0),
-      totalDiscount: orders.reduce((sum, o) => sum + Number(o.discount), 0),
-      averageOrderValue: orders.length > 0 ? orders.reduce((sum, o) => sum + Number(o.total), 0) / orders.length : 0,
+      grossRevenue,
+      totalRevenue: netSalesRevenue,
+      totalTax: saleOrders.reduce((sum, o) => sum + Number(o.taxAmount), 0),
+      totalDiscount: saleOrders.reduce((sum, o) => sum + Number(o.discount), 0),
+      averageOrderValue: saleOrders.length > 0 ? netSalesRevenue / saleOrders.length : 0,
       paidAmount: orders.reduce((sum, o) => sum + Number(o.paidAmount), 0),
       outstanding: orders.reduce((sum, o) => sum + Number(o.balanceDue), 0),
     };
@@ -47,7 +68,7 @@ export class ReportsService {
         dailyBreakdown[dateKey] = { orders: 0, revenue: 0 };
       }
       dailyBreakdown[dateKey].orders += 1;
-      dailyBreakdown[dateKey].revenue += Number(order.total);
+      if (order.status !== 'RETURNED') dailyBreakdown[dateKey].revenue += Number(order.total);
     }
 
     return { summary, byStatus, byPaymentMethod, dailyBreakdown, orders };
@@ -56,7 +77,7 @@ export class ReportsService {
   async inventoryReport(tenantId: string) {
     const inventory = await this.prisma.inventory.findMany({
       where: { tenantId },
-      include: { product: true },
+      include: { product: { select: { id: true, name: true, sku: true, categoryId: true, costPrice: true, basePrice: true, minStock: true } } },
     });
 
     const totalValue = inventory.reduce((sum, inv) => {
@@ -84,15 +105,12 @@ export class ReportsService {
   async collectionReport(tenantId: string, filters: { fromDate: string; toDate: string; salesRepId?: string }) {
     const where: any = {
       order: { tenantId },
-      createdAt: {
-        gte: new Date(filters.fromDate),
-        lte: new Date(filters.toDate),
-      },
+      createdAt: parseDateRange(filters.fromDate, filters.toDate),
     };
 
     const payments = await this.prisma.payment.findMany({
       where,
-      include: { order: { include: { customer: true, salesRep: { omit: { password: true } } } } },
+      select: { id: true, orderId: true, amount: true, method: true, createdAt: true, order: { select: { id: true, orderNumber: true, customer: { select: { id: true, name: true } }, salesRep: { select: { id: true, firstName: true, lastName: true } } } } },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -115,14 +133,15 @@ export class ReportsService {
   async customerReport(tenantId: string) {
     const customers = await this.prisma.customer.findMany({
       where: { tenantId, isActive: true },
-      include: { orders: { include: { payments: true } } },
+      include: { orders: { where: { tenantId }, select: { total: true, paidAmount: true, balanceDue: true, createdAt: true, status: true }, orderBy: { createdAt: 'desc' } } },
     });
 
     const report = customers.map((customer) => {
-      const totalOrders = customer.orders.length;
-      const totalRevenue = customer.orders.reduce((sum, o) => sum + Number(o.total), 0);
-      const totalPaid = customer.orders.reduce((sum, o) => sum + Number(o.paidAmount), 0);
-      const balance = customer.orders.reduce((sum, o) => sum + Number(o.balanceDue), 0);
+      const saleOrders = customer.orders.filter((order) => order.status !== 'RETURNED');
+      const totalOrders = saleOrders.length;
+      const totalRevenue = saleOrders.reduce((sum, o) => sum + Number(o.total), 0);
+      const totalPaid = saleOrders.reduce((sum, o) => sum + Number(o.paidAmount), 0);
+      const balance = saleOrders.reduce((sum, o) => sum + Number(o.balanceDue), 0);
       const lastOrder = customer.orders[0]?.createdAt || null;
 
       return {

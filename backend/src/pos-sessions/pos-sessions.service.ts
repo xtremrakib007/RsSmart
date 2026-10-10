@@ -55,41 +55,71 @@ export class PosSessionsService {
     closingCash: number;
     closingDenominations?: Record<string, number>;
     forceClose?: boolean;
-  }) {
-    const session = await this.prisma.posSession.findFirst({
-      where: { id: sessionId, tenantId },
-    });
-    if (!session) throw new NotFoundException('Session not found');
-    if (session.status !== 'OPEN') throw new BadRequestException('Session is already closed');
-
-    const movements = await this.prisma.posCashMovement.findMany({
-      where: { tenantId, sessionId: session.id },
-    });
-    let expectedCash = Number(session.openingCash);
-    for (const movement of movements) {
-      const amount = Number(movement.amount);
-      if (movement.type === 'SALE' || movement.type === 'IN') expectedCash += amount;
-      if (movement.type === 'REFUND' || movement.type === 'OUT') expectedCash -= amount;
+  }, outletId?: string) {
+    if (!Number.isFinite(data?.closingCash) || data.closingCash < 0 ||
+        Math.round(data.closingCash * 100) / 100 !== data.closingCash) {
+      throw new BadRequestException('Closing cash must be a non-negative amount with at most two decimal places');
     }
+    if (data.forceClose !== undefined && typeof data.forceClose !== 'boolean') {
+      throw new BadRequestException('forceClose must be a boolean');
+    }
+    if (data.closingDenominations !== undefined) {
+      const denominations = data.closingDenominations;
+      if (!denominations || typeof denominations !== 'object' || Array.isArray(denominations) ||
+          Object.entries(denominations).length > 50 ||
+          Object.entries(denominations).some(([key, value]) =>
+            !key || key.length > 40 || typeof value !== 'number' ||
+            !Number.isSafeInteger(value) || value < 0)) {
+        throw new BadRequestException('Closing denominations must contain valid non-negative integer counts');
+      }
+    }
+    return this.prisma.$transaction(async (tx: any) => {
+      // Lock the OPEN session row before reading movements. Cash movement
+      // creation uses the same lock, so closing cannot omit a concurrent entry.
+      const locked = await tx.posSession.updateMany({
+        where: { id: sessionId, tenantId, status: 'OPEN', ...(outletId ? { outletId } : {}) },
+        data: { status: 'OPEN' },
+      });
+      if (locked.count !== 1) {
+        const exists = await tx.posSession.findFirst({ where: { id: sessionId, tenantId, ...(outletId ? { outletId } : {}) }, select: { id: true } });
+        if (!exists) throw new NotFoundException('Session not found');
+        throw new BadRequestException('Session is already closed');
+      }
+      const session = await tx.posSession.findFirst({
+        where: { id: sessionId, tenantId, status: 'OPEN', ...(outletId ? { outletId } : {}) },
+      });
+      if (!session) throw new BadRequestException('Session is already closed');
 
-    const discrepancy = data.closingCash - expectedCash;
+      const movements = await tx.posCashMovement.findMany({
+        where: { tenantId, outletId: session.outletId, sessionId: session.id },
+      });
+      let expectedCash = Number(session.openingCash);
+      for (const movement of movements) {
+        const amount = Number(movement.amount);
+        if (movement.type === 'SALE' || movement.type === 'IN') expectedCash += amount;
+        if (movement.type === 'REFUND' || movement.type === 'OUT') expectedCash -= amount;
+      }
 
-    return this.prisma.posSession.update({
-      where: { id: sessionId },
-      data: {
-        status: data.forceClose ? 'FORCE_CLOSED' : 'CLOSED',
-        closedAt: new Date(),
-        closingCash: data.closingCash,
-        closingDenominations: data.closingDenominations || undefined,
-        expectedCash,
-        discrepancy,
-      },
+      const discrepancy = data.closingCash - expectedCash;
+      const closed = await tx.posSession.updateMany({
+        where: { id: sessionId, tenantId, status: 'OPEN' },
+        data: {
+          status: data.forceClose ? 'FORCE_CLOSED' : 'CLOSED',
+          closedAt: new Date(),
+          closingCash: data.closingCash,
+          closingDenominations: data.closingDenominations || undefined,
+          expectedCash,
+          discrepancy,
+        },
+      });
+      if (closed.count !== 1) throw new BadRequestException('Session is already closed');
+      return tx.posSession.findFirst({ where: { id: sessionId, tenantId } });
     });
   }
 
-  async getSessionReport(tenantId: string, sessionId: string) {
+  async getSessionReport(tenantId: string, sessionId: string, outletId?: string) {
     const session = await this.prisma.posSession.findFirst({
-      where: { id: sessionId, tenantId },
+      where: { id: sessionId, tenantId, ...(outletId ? { outletId } : {}) },
       include: { user: { omit: { password: true } } },
     });
     if (!session) throw new NotFoundException('Session not found');
@@ -97,11 +127,22 @@ export class PosSessionsService {
     const orders = await this.prisma.order.findMany({
       where: {
         tenantId,
+        outletId: session.outletId,
         salesRepId: session.userId,
         createdAt: { gte: session.openedAt },
         source: 'POS',
       },
-      include: { items: { include: { product: true } }, payments: true, customer: true },
+      include: {
+        items: {
+          select: {
+            id: true, productId: true, quantity: true, unitPrice: true,
+            discount: true, taxRate: true, taxAmount: true, total: true,
+            product: { select: { id: true, sku: true, name: true, barcode: true, basePrice: true, taxRate: true } },
+          },
+        },
+        payments: { select: { id: true, amount: true, method: true, reference: true, createdAt: true } },
+        customer: { select: { id: true, name: true, phone: true, email: true } },
+      },
     });
 
     const paymentSummary: Record<string, number> = {};

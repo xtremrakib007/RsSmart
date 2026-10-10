@@ -14,7 +14,7 @@ describe('InventoryService — outlet isolation', () => {
     prisma = {
       inventory: { findFirst: jest.fn(), findMany: jest.fn(), updateMany: jest.fn(), create: jest.fn() },
       stockMovement: { create: jest.fn(), findMany: jest.fn() },
-      $transaction: jest.fn((ops: any[]) => Promise.all(ops)),
+      $transaction: jest.fn(async (work: any) => typeof work === 'function' ? work(prisma) : Promise.all(work)),
     };
     service = new InventoryService(prisma);
   });
@@ -47,7 +47,7 @@ describe('InventoryService — outlet isolation', () => {
     await service.adjustStock(tenantId, outletA, 'user-1', { productId, quantity: 5, type: 'INBOUND' });
 
     expect(prisma.inventory.updateMany).toHaveBeenCalledWith({
-      where: { id: 'inv-a', version: 3 },
+      where: { id: 'inv-a', tenantId, outletId: outletA, version: 3 },
       data: { quantity: 15, version: { increment: 1 } },
     });
     expect(prisma.stockMovement.create).toHaveBeenCalledWith({
@@ -70,6 +70,7 @@ describe('InventoryService — outlet isolation', () => {
     await expect(
       service.adjustStock(tenantId, outletA, 'user-1', { productId, quantity: 2, type: 'OUTBOUND' }),
     ).rejects.toThrow(ConflictException);
+    expect(prisma.stockMovement.create).not.toHaveBeenCalled();
   });
 
   it('reserveStock and releaseStock are scoped to the given outlet', async () => {
@@ -79,7 +80,7 @@ describe('InventoryService — outlet isolation', () => {
     await service.reserveStock(tenantId, outletA, productId, 3);
     expect(prisma.inventory.findFirst).toHaveBeenCalledWith({ where: { tenantId, outletId: outletA, productId } });
     expect(prisma.inventory.updateMany).toHaveBeenCalledWith({
-      where: { id: 'inv-a', version: 1 },
+      where: { id: 'inv-a', tenantId, outletId: outletA, version: 1 },
       data: { reserved: { increment: 3 }, version: { increment: 1 } },
     });
   });
@@ -89,6 +90,58 @@ describe('InventoryService — outlet isolation', () => {
     prisma.inventory.updateMany.mockResolvedValue({ count: 0 });
 
     await expect(service.reserveStock(tenantId, outletA, productId, 1)).rejects.toThrow(ConflictException);
+  });
+
+  it('rejects negative, zero, infinite and NaN mutation quantities', async () => {
+    for (const quantity of [-1, 0, Infinity, NaN]) {
+      await expect(service.reserveStock(tenantId, outletA, productId, quantity)).rejects.toThrow(BadRequestException);
+      await expect(service.releaseStock(tenantId, outletA, productId, quantity)).rejects.toThrow(BadRequestException);
+      await expect(service.transferStock(tenantId, outletA, 'user-1', { productId, quantity })).rejects.toThrow(BadRequestException);
+    }
+    expect(prisma.inventory.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('does not allow releasing more than the reserved quantity', async () => {
+    prisma.inventory.findFirst.mockResolvedValue({ id: 'inv-a', quantity: 10, reserved: 2, version: 1 });
+    await expect(service.releaseStock(tenantId, outletA, productId, 3)).rejects.toThrow(BadRequestException);
+    expect(prisma.inventory.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('rejects stock adjustment if type is invalid before touching the database', async () => {
+    await expect(service.adjustStock(tenantId, outletA, 'user-1', {
+      productId, quantity: 2, type: 'CORRUPTED' as any,
+    })).rejects.toThrow(BadRequestException);
+    expect(prisma.inventory.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('does not allow outbound adjustments to consume reserved stock', async () => {
+    prisma.inventory.findFirst.mockResolvedValue({ id: 'inv-a', quantity: 10, reserved: 8, version: 1 });
+    await expect(service.adjustStock(tenantId, outletA, 'user-1', {
+      productId, quantity: 3, type: 'OUTBOUND',
+    })).rejects.toThrow(BadRequestException);
+    expect(prisma.inventory.updateMany).not.toHaveBeenCalled();
+    expect(prisma.stockMovement.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects a transfer to the same warehouse before database access', async () => {
+    await expect(service.transferStock(tenantId, outletA, 'user-1', {
+      productId, fromWarehouseId: 'wh-1', toWarehouseId: 'wh-1', quantity: 1,
+    })).rejects.toThrow(BadRequestException);
+    expect(prisma.inventory.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('does not create transfer ledger entries if destination optimistic lock fails', async () => {
+    prisma.inventory.findFirst
+      .mockResolvedValueOnce({ id: 'inv-from', quantity: 10, reserved: 0, version: 1 })
+      .mockResolvedValueOnce({ id: 'inv-to', quantity: 2, reserved: 0, version: 3 });
+    prisma.inventory.updateMany
+      .mockResolvedValueOnce({ count: 1 })
+      .mockResolvedValueOnce({ count: 0 });
+
+    await expect(service.transferStock(tenantId, outletA, 'user-1', {
+      productId, fromWarehouseId: 'wh-1', toWarehouseId: 'wh-2', quantity: 4,
+    })).rejects.toThrow(ConflictException);
+    expect(prisma.stockMovement.create).not.toHaveBeenCalled();
   });
 
   it('transferStock moves quantity between warehouses within the SAME outlet', async () => {
@@ -196,7 +249,7 @@ describe('InventoryService — concurrency & boundary cases (Phase 26)', () => {
 
     expect(result.inventory.quantity).toBe(0);
     expect(prisma.inventory.updateMany).toHaveBeenCalledWith({
-      where: { id: 'inv-a', version: 2 },
+      where: { id: 'inv-a', tenantId, outletId: outletA, version: 2 },
       data: { quantity: 0, version: { increment: 1 } },
     });
   });

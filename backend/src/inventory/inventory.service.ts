@@ -21,7 +21,7 @@ export class InventoryService {
 
     const inventory = await this.prisma.inventory.findMany({
       where,
-      include: { product: true },
+      include: { product: { select: { id: true, sku: true, name: true, barcode: true, minStock: true, isActive: true } } },
     });
 
     if (filters?.lowStock) {
@@ -37,7 +37,7 @@ export class InventoryService {
   async getStockMovement(tenantId: string, outletId: string, productId: string) {
     return this.prisma.stockMovement.findMany({
       where: { tenantId, outletId, inventory: { productId } },
-      include: { inventory: { include: { product: true } } },
+      include: { inventory: { include: { product: { select: { id: true, sku: true, name: true, barcode: true } } } } },
       orderBy: { createdAt: 'desc' },
       take: 50,
     });
@@ -50,32 +50,57 @@ export class InventoryService {
     notes?: string;
     referenceId?: string;
   }) {
-    const inventory = await this.prisma.inventory.findFirst({
-      where: { tenantId, outletId, productId: data.productId },
-    });
-
-    if (!inventory) {
-      throw new NotFoundException('Inventory record not found for this product at this outlet');
+    if (!data || typeof data.productId !== 'string' || !data.productId.trim()) {
+      throw new BadRequestException('A valid productId is required');
+    }
+    if (!['INBOUND', 'OUTBOUND', 'ADJUSTMENT'].includes(data.type)) {
+      throw new BadRequestException('Invalid inventory movement type');
+    }
+    if (!Number.isFinite(data.quantity) || data.quantity < 0 ||
+      (data.type !== 'ADJUSTMENT' && data.quantity <= 0)) {
+      throw new BadRequestException('Quantity must be positive; adjustments may be zero');
+    }
+    if (data.notes !== undefined && (typeof data.notes !== 'string' || data.notes.length > 2000)) {
+      throw new BadRequestException('Notes must be a string of at most 2000 characters');
+    }
+    if (data.referenceId !== undefined && (typeof data.referenceId !== 'string' || data.referenceId.length > 200)) {
+      throw new BadRequestException('Reference ID must be a string of at most 200 characters');
     }
 
-    let newQuantity = Number(inventory.quantity);
-    if (data.type === 'INBOUND') newQuantity += data.quantity;
-    else if (data.type === 'OUTBOUND') {
-      if (newQuantity < data.quantity) {
-        throw new BadRequestException('Insufficient stock for outbound movement');
+    // Keep the version check, quantity update and movement insert in ONE
+    // transaction. Otherwise a conflict could still leave an orphan movement.
+    return this.prisma.$transaction(async (tx) => {
+      const inventory = await tx.inventory.findFirst({
+        where: { tenantId, outletId, productId: data.productId },
+      });
+      if (!inventory) {
+        throw new NotFoundException('Inventory record not found for this product at this outlet');
       }
-      newQuantity -= data.quantity;
-    } else if (data.type === 'ADJUSTMENT') {
-      newQuantity = data.quantity;
-    }
 
-    // Phase 26: optimistic locking — only succeed if version hasn't changed since read.
-    const [updatedInventory, movement] = await this.prisma.$transaction([
-      this.prisma.inventory.updateMany({
-        where: { id: inventory.id, version: inventory.version },
+      let newQuantity = Number(inventory.quantity);
+      if (data.type === 'INBOUND') newQuantity += data.quantity;
+      else if (data.type === 'OUTBOUND') {
+        const available = newQuantity - Number(inventory.reserved);
+        if (available < data.quantity) {
+          throw new BadRequestException('Insufficient unreserved stock for outbound movement');
+        }
+        newQuantity -= data.quantity;
+      } else {
+        newQuantity = data.quantity;
+        if (newQuantity < Number(inventory.reserved)) {
+          throw new BadRequestException('Adjusted quantity cannot be lower than reserved stock');
+        }
+      }
+
+      const updated = await tx.inventory.updateMany({
+        where: { id: inventory.id, tenantId, outletId, version: inventory.version },
         data: { quantity: newQuantity, version: { increment: 1 } },
-      }),
-      this.prisma.stockMovement.create({
+      });
+      if (updated.count !== 1) {
+        throw new ConflictException('Inventory was modified by another operation. Please retry.');
+      }
+
+      const movement = await tx.stockMovement.create({
         data: {
           tenantId,
           outletId,
@@ -86,17 +111,15 @@ export class InventoryService {
           notes: data.notes,
           createdBy: userId,
         },
-      }),
-    ]);
+      });
 
-    if (updatedInventory.count === 0) {
-      throw new ConflictException('Inventory was modified by another operation. Please retry.');
-    }
-
-    return { inventory: { ...inventory, quantity: newQuantity, version: inventory.version + 1 }, movement };
+      return { inventory: { ...inventory, quantity: newQuantity, version: inventory.version + 1 }, movement };
+    });
   }
 
   async reserveStock(tenantId: string, outletId: string, productId: string, quantity: number) {
+    if (typeof productId !== 'string' || !productId.trim()) throw new BadRequestException('A valid productId is required');
+    if (!Number.isFinite(quantity) || quantity <= 0) throw new BadRequestException('Reservation quantity must be positive and finite');
     const inventory = await this.prisma.inventory.findFirst({
       where: { tenantId, outletId, productId },
     });
@@ -109,7 +132,7 @@ export class InventoryService {
 
     // Phase 26: optimistic locking
     const updated = await this.prisma.inventory.updateMany({
-      where: { id: inventory.id, version: inventory.version },
+      where: { id: inventory.id, tenantId, outletId, version: inventory.version },
       data: { reserved: { increment: quantity }, version: { increment: 1 } },
     });
 
@@ -121,16 +144,19 @@ export class InventoryService {
   }
 
   async releaseStock(tenantId: string, outletId: string, productId: string, quantity: number) {
+    if (typeof productId !== 'string' || !productId.trim()) throw new BadRequestException('A valid productId is required');
+    if (!Number.isFinite(quantity) || quantity <= 0) throw new BadRequestException('Release quantity must be positive and finite');
     const inventory = await this.prisma.inventory.findFirst({
       where: { tenantId, outletId, productId },
     });
     if (!inventory) throw new NotFoundException('Inventory not found at this outlet');
 
-    const newReserved = Math.max(0, Number(inventory.reserved) - quantity);
+    if (Number(inventory.reserved) < quantity) throw new BadRequestException('Cannot release more stock than is reserved');
+    const newReserved = Number(inventory.reserved) - quantity;
 
     // Phase 26: optimistic locking
     const updated = await this.prisma.inventory.updateMany({
-      where: { id: inventory.id, version: inventory.version },
+      where: { id: inventory.id, tenantId, outletId, version: inventory.version },
       data: { reserved: newReserved, version: { increment: 1 } },
     });
 
@@ -152,29 +178,66 @@ export class InventoryService {
     quantity: number;
     notes?: string;
   }) {
-    const fromInv = await this.prisma.inventory.findFirst({
-      where: { tenantId, outletId, productId: data.productId, warehouseId: data.fromWarehouseId || null },
-    });
-    if (!fromInv || Number(fromInv.quantity) < data.quantity) {
-      throw new BadRequestException('Insufficient stock at source');
+    if (!data || typeof data.productId !== 'string' || !data.productId.trim()) {
+      throw new BadRequestException('A valid productId is required');
+    }
+    if (!Number.isFinite(data.quantity) || data.quantity <= 0) {
+      throw new BadRequestException('Transfer quantity must be a positive finite number');
+    }
+    if ((data.fromWarehouseId || null) === (data.toWarehouseId || null)) {
+      throw new BadRequestException('Source and destination warehouses must be different');
+    }
+    if (data.notes !== undefined && (typeof data.notes !== 'string' || data.notes.length > 2000)) {
+      throw new BadRequestException('Notes must be a string of at most 2000 characters');
     }
 
-    let toInv = await this.prisma.inventory.findFirst({
-      where: { tenantId, outletId, productId: data.productId, warehouseId: data.toWarehouseId || null },
-    });
+    // Source, destination and both ledger entries must commit or roll back
+    // together. A sequential update outside the transaction can lose stock
+    // or leave only one side of a transfer recorded.
+    return this.prisma.$transaction(async (tx) => {
+      const fromInv = await tx.inventory.findFirst({
+        where: { tenantId, outletId, productId: data.productId, warehouseId: data.fromWarehouseId || null },
+      });
+      if (!fromInv || Number(fromInv.quantity) - Number(fromInv.reserved) < data.quantity) {
+        throw new BadRequestException('Insufficient unreserved stock at source');
+      }
 
-    // Phase 26: optimistic locking on both source and destination.
-    // Source update must succeed with its current version.
-    const sourceUpdated = await this.prisma.inventory.updateMany({
-      where: { id: fromInv.id, version: fromInv.version },
-      data: { quantity: { decrement: data.quantity }, version: { increment: 1 } },
-    });
-    if (sourceUpdated.count === 0) {
-      throw new ConflictException('Source inventory was modified by another operation. Please retry.');
-    }
+      const sourceUpdated = await tx.inventory.updateMany({
+        where: { id: fromInv.id, tenantId, outletId, version: fromInv.version },
+        data: { quantity: { decrement: data.quantity }, version: { increment: 1 } },
+      });
+      if (sourceUpdated.count !== 1) {
+        throw new ConflictException('Source inventory was modified by another operation. Please retry.');
+      }
 
-    const operations: any[] = [
-      this.prisma.stockMovement.create({
+      const toInv = await tx.inventory.findFirst({
+        where: { tenantId, outletId, productId: data.productId, warehouseId: data.toWarehouseId || null },
+      });
+
+      let destination;
+      if (toInv) {
+        const destinationUpdated = await tx.inventory.updateMany({
+          where: { id: toInv.id, tenantId, outletId, version: toInv.version },
+          data: { quantity: { increment: data.quantity }, version: { increment: 1 } },
+        });
+        if (destinationUpdated.count !== 1) {
+          throw new ConflictException('Destination inventory was modified by another operation. Please retry.');
+        }
+        destination = { ...toInv, quantity: Number(toInv.quantity) + data.quantity, version: toInv.version + 1 };
+      } else {
+        destination = await tx.inventory.create({
+          data: {
+            tenantId,
+            outletId,
+            productId: data.productId,
+            warehouseId: data.toWarehouseId,
+            quantity: data.quantity,
+            reserved: 0,
+          },
+        });
+      }
+
+      const sourceMovement = await tx.stockMovement.create({
         data: {
           tenantId,
           outletId,
@@ -184,47 +247,24 @@ export class InventoryService {
           notes: `Transfer out: ${data.notes || ''}`,
           createdBy: userId,
         },
-      }),
-    ];
-
-    if (toInv) {
-      // Destination update must also succeed with its current version.
-      const destUpdated = await this.prisma.inventory.updateMany({
-        where: { id: toInv.id, version: toInv.version },
-        data: { quantity: { increment: data.quantity }, version: { increment: 1 } },
       });
-      if (destUpdated.count === 0) {
-        throw new ConflictException('Destination inventory was modified by another operation. Please retry.');
-      }
+      const destinationMovement = await tx.stockMovement.create({
+        data: {
+          tenantId,
+          outletId,
+          inventoryId: destination.id,
+          type: 'TRANSFER',
+          quantity: data.quantity,
+          notes: `Transfer in: ${data.notes || ''}`,
+          createdBy: userId,
+        },
+      });
 
-      operations.push(
-        this.prisma.stockMovement.create({
-          data: {
-            tenantId,
-            outletId,
-            inventoryId: toInv.id,
-            type: 'TRANSFER',
-            quantity: data.quantity,
-            notes: `Transfer in: ${data.notes || ''}`,
-            createdBy: userId,
-          },
-        }),
-      );
-    } else {
-      operations.push(
-        this.prisma.inventory.create({
-          data: {
-            tenantId,
-            outletId,
-            productId: data.productId,
-            warehouseId: data.toWarehouseId,
-            quantity: data.quantity,
-          },
-        }),
-      );
-    }
-
-    const results = await this.prisma.$transaction(operations);
-    return results;
+      return {
+        source: { ...fromInv, quantity: Number(fromInv.quantity) - data.quantity, version: fromInv.version + 1 },
+        destination,
+        movements: [sourceMovement, destinationMovement],
+      };
+    });
   }
-}
+}\n}\n

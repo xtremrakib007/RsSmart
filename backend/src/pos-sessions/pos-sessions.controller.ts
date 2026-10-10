@@ -4,6 +4,8 @@ import { PosSessionsService } from './pos-sessions.service';
 import { CurrentUser } from '../common/decorators/user.decorator';
 import { CurrentOutlet } from '../common/decorators/outlet.decorator';
 import { OutletGuard } from '../common/guards/outlet.guard';
+import { RequirePermissions } from '../common/decorators/permissions.decorator';
+import { Permission } from '../common/permissions/permission.enum';
 
 @ApiTags('POS Sessions')
 @ApiBearerAuth()
@@ -12,6 +14,7 @@ export class PosSessionsController {
   constructor(private posSessionsService: PosSessionsService) {}
 
   @Get('active')
+  @RequirePermissions(Permission.POS_OPEN)
   @ApiOperation({ summary: 'Get active session for device' })
   getActiveSession(
     @Query('deviceId') deviceId: string,
@@ -21,6 +24,7 @@ export class PosSessionsController {
   }
 
   @Post('open')
+  @RequirePermissions(Permission.POS_OPEN)
   @UseGuards(OutletGuard)
   @ApiHeader({ name: 'x-outlet-id', required: false, description: "Which outlet this terminal is opening at; defaults to the user's default outlet" })
   @ApiOperation({ summary: 'Open POS session at an outlet' })
@@ -29,22 +33,29 @@ export class PosSessionsController {
   }
 
   @Put(':id/close')
+  @RequirePermissions(Permission.POS_CLOSE)
+  @UseGuards(OutletGuard)
   @ApiOperation({ summary: 'Close POS session' })
   closeSession(
     @Param('id') id: string,
     @Body() data: { closingCash: number; closingDenominations?: Record<string, number>; forceClose?: boolean },
     @CurrentUser() user: any,
+    @CurrentOutlet() outlet: any,
   ) {
-    return this.posSessionsService.closeSession(user.tenantId, id, data);
+    return this.posSessionsService.closeSession(user.tenantId, id, data, outlet.id);
   }
 
   @Get(':id/report')
+  @RequirePermissions(Permission.REPORTS_READ)
+  @UseGuards(OutletGuard)
   @ApiOperation({ summary: 'Get session report' })
-  getSessionReport(@Param('id') id: string, @CurrentUser() user: any) {
-    return this.posSessionsService.getSessionReport(user.tenantId, id);
+  getSessionReport(@Param('id') id: string, @CurrentUser() user: any, @CurrentOutlet() outlet: any) {
+    return this.posSessionsService.getSessionReport(user.tenantId, id, outlet.id);
   }
 
   @Get()
+  @RequirePermissions(Permission.REPORTS_READ)
+  @UseGuards(OutletGuard)
   @ApiOperation({ summary: 'Get all sessions' })
   @ApiQuery({ name: 'userId', required: false })
   @ApiQuery({ name: 'outletId', required: false })
@@ -52,11 +63,12 @@ export class PosSessionsController {
   @ApiQuery({ name: 'toDate', required: false })
   getSessions(
     @CurrentUser() user: any,
-    @Query('userId') userId?: string,
-    @Query('outletId') outletId?: string,
-    @Query('fromDate') fromDate?: string,
-    @Query('toDate') toDate?: string,
+    @Query('userId') userId: string | undefined,
+    @Query('outletId') outletId: string | undefined,
+    @Query('fromDate') fromDate: string | undefined,
+    @Query('toDate') toDate: string | undefined,
+    @CurrentOutlet() outlet: any,
   ) {
-    return this.posSessionsService.getSessions(user.tenantId, { userId, outletId, fromDate, toDate });
+    return this.posSessionsService.getSessions(user.tenantId, { userId, outletId: outlet.id, fromDate, toDate });
   }
 }

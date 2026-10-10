@@ -83,6 +83,20 @@ describe('PaymentsService', () => {
       expect(JSON.stringify(loggedCall)).not.toContain('secretNote');
     });
 
+    it('returns the provider checkout even if audit persistence fails after provider creation', async () => {
+      const providerResult = {
+        providerReference: 'mock_audit_failure',
+        checkoutUrl: 'https://mock-payment.local/checkout/mock_audit_failure',
+        status: 'PENDING',
+        amount: params.amount,
+      };
+      provider.createCheckout.mockResolvedValue(providerResult);
+      audit.log.mockRejectedValue(new Error('audit database unavailable'));
+
+      await expect(service.createCheckout(tenantId, actorUserId, params)).resolves.toBe(providerResult);
+      expect(provider.createCheckout).toHaveBeenCalledTimes(1);
+    });
+
     it('returns exactly what the provider returned', async () => {
       const providerResult = {
         providerReference: 'mock_xyz',
@@ -130,6 +144,20 @@ describe('PaymentsService', () => {
 
       await expect(service.refund(tenantId, actorUserId, 'mock_abc')).rejects.toThrow(NotImplementedException);
       expect(provider.refund).not.toHaveBeenCalled();
+    });
+
+    it('returns a completed provider refund even if audit persistence fails', async () => {
+      const providerResult = {
+        providerReference: 'mock_abc',
+        refundReference: 'mock_refund_audit_failure',
+        status: 'REFUNDED',
+        amount: { amount: 5000, currency: 'MYR' },
+      };
+      provider.refund.mockResolvedValue(providerResult);
+      audit.log.mockRejectedValue(new Error('audit database unavailable'));
+
+      await expect(service.refund(tenantId, actorUserId, 'mock_abc')).resolves.toBe(providerResult);
+      expect(provider.refund).toHaveBeenCalledTimes(1);
     });
 
     it('delegates to the provider and audits the refund when supported', async () => {

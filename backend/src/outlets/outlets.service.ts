@@ -69,8 +69,8 @@ export class OutletsService {
       throw new BadRequestException('The default outlet cannot be deactivated');
     }
 
-    const updated = await this.prisma.outlet.update({
-      where: { id: outletId },
+    const result = await this.prisma.outlet.updateMany({
+      where: { id: outletId, tenantId },
       data: {
         name: dto.name,
         address: dto.address,
@@ -79,6 +79,8 @@ export class OutletsService {
         status: dto.status,
       },
     });
+    if (result.count !== 1) throw new NotFoundException('Outlet not found');
+    const updated = await this.get(tenantId, outletId);
 
     await this.audit.log({
       tenantId,
@@ -109,7 +111,7 @@ export class OutletsService {
 
     if (isDefault) {
       await this.prisma.userOutlet.updateMany({
-        where: { userId: targetUserId, isDefault: true },
+        where: { tenantId, userId: targetUserId, isDefault: true },
         data: { isDefault: false },
       });
     }
@@ -141,12 +143,13 @@ export class OutletsService {
       throw new NotFoundException('Assignment not found');
     }
 
-    const remainingAssignments = await this.prisma.userOutlet.count({ where: { userId: targetUserId } });
+    const remainingAssignments = await this.prisma.userOutlet.count({ where: { tenantId, userId: targetUserId } });
     if (remainingAssignments <= 1) {
       throw new BadRequestException("Cannot remove a user's last remaining outlet assignment");
     }
 
-    await this.prisma.userOutlet.delete({ where: { id: assignment.id } });
+    const deleted = await this.prisma.userOutlet.deleteMany({ where: { id: assignment.id, tenantId, outletId, userId: targetUserId } });
+    if (deleted.count !== 1) throw new NotFoundException('Assignment not found');
 
     await this.audit.log({
       tenantId,

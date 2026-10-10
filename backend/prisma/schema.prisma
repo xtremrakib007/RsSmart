@@ -1152,6 +1152,8 @@ model SubscriptionCheckout {
   // replay/duplicate delivery (providers retry webhooks) and is a no-op —
   // not an error, not reprocessed.
   webhookProcessedAt DateTime?      @map("webhook_processed_at")
+  // Atomic webhook lease. Stale leases can be reclaimed after process crashes.
+  webhookProcessingAt DateTime?     @map("webhook_processing_at")
   createdAt          DateTime       @default(now()) @map("created_at")
   updatedAt          DateTime       @updatedAt @map("updated_at")
 

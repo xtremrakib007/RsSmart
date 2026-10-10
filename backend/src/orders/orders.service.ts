@@ -11,38 +11,80 @@ export class OrdersService {
     private push: PushService,
   ) {}
 
-  async findAll(tenantId: string, filters?: { status?: string; customerId?: string; salesRepId?: string; outletId?: string; fromDate?: string; toDate?: string }) {
+  async findAll(tenantId: string, filters?: { status?: string; customerId?: string; salesRepId?: string; outletId?: string; fromDate?: string; toDate?: string; page?: string | number; limit?: string | number }) {
+    const page = Number(filters?.page ?? 1);
+    const limit = Number(filters?.limit ?? 50);
+    if (!Number.isSafeInteger(page) || page < 1 || page > 1000000 ||
+        !Number.isInteger(limit) || limit < 1 || limit > 100) {
+      throw new BadRequestException('Page must be between 1 and 1000000 and limit must be between 1 and 100');
+    }
     const where: any = { tenantId };
-    if (filters?.status) where.status = filters.status;
+    // The controller supplies the outlet resolved by OutletGuard. Never trust
+    // an arbitrary query outletId as an authorization decision.
+    if (filters?.outletId) where.outletId = filters.outletId;
+    if (filters?.status) {
+      const allowedStatuses = new Set([
+        'DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'PROCESSING',
+        'SHIPPED', 'DELIVERED', 'CANCELLED', 'RETURNED',
+      ]);
+      if (!allowedStatuses.has(filters.status)) {
+        throw new BadRequestException('Invalid order status filter');
+      }
+      where.status = filters.status;
+    }
     if (filters?.customerId) where.customerId = filters.customerId;
     if (filters?.salesRepId) where.salesRepId = filters.salesRepId;
-    if (filters?.outletId) where.outletId = filters.outletId;
     if (filters?.fromDate || filters?.toDate) {
       where.createdAt = {};
-      if (filters.fromDate) where.createdAt.gte = new Date(filters.fromDate);
-      if (filters.toDate) where.createdAt.lte = new Date(filters.toDate);
+      if (filters.fromDate) {
+        const fromDate = new Date(filters.fromDate);
+        if (Number.isNaN(fromDate.getTime())) throw new BadRequestException('Invalid fromDate filter');
+        where.createdAt.gte = fromDate;
+      }
+      if (filters.toDate) {
+        const toDate = new Date(filters.toDate);
+        if (Number.isNaN(toDate.getTime())) throw new BadRequestException('Invalid toDate filter');
+        where.createdAt.lte = toDate;
+      }
+      if (where.createdAt.gte && where.createdAt.lte && where.createdAt.gte > where.createdAt.lte) {
+        throw new BadRequestException('fromDate must be before or equal to toDate');
+      }
     }
 
     return this.prisma.order.findMany({
       where,
       include: {
-        customer: true,
-        salesRep: { omit: { password: true } },
-        items: { include: { product: true } },
-        payments: true,
+        customer: { select: { id: true, code: true, name: true, email: true, phone: true } },
+        salesRep: { select: { id: true, firstName: true, lastName: true } },
+        items: {
+          include: {
+            product: {
+              select: { id: true, sku: true, name: true, barcode: true, basePrice: true, taxRate: true },
+            },
+          },
+        },
+        payments: { select: { id: true, amount: true, method: true, reference: true, createdAt: true } },
       },
+      skip: (page - 1) * limit,
+      take: limit,
       orderBy: { createdAt: 'desc' },
     });
   }
 
-  async findOne(id: string, tenantId: string) {
+  async findOne(id: string, tenantId: string, outletId?: string) {
     const order = await this.prisma.order.findFirst({
-      where: { id, tenantId },
+      where: { id, tenantId, ...(outletId ? { outletId } : {}) },
       include: {
-        customer: true,
-        salesRep: { omit: { password: true } },
-        items: { include: { product: true } },
-        payments: true,
+        customer: { select: { id: true, code: true, name: true, email: true, phone: true } },
+        salesRep: { select: { id: true, firstName: true, lastName: true } },
+        items: {
+          include: {
+            product: {
+              select: { id: true, sku: true, name: true, barcode: true, basePrice: true, taxRate: true },
+            },
+          },
+        },
+        payments: { select: { id: true, amount: true, method: true, reference: true, createdAt: true } },
       },
     });
     if (!order) throw new NotFoundException('Order not found');
@@ -50,23 +92,85 @@ export class OrdersService {
   }
 
   async create(tenantId: string, outletId: string, userId: string, data: any) {
-    // Calculate totals
+    if (!Array.isArray(data.items) || data.items.length === 0) {
+      throw new BadRequestException('An order must contain at least one item');
+    }
+    const [outlet, customer, salesRep] = await Promise.all([
+      this.prisma.outlet.findFirst({ where: { id: outletId, tenantId, status: 'ACTIVE' }, select: { id: true } }),
+      this.prisma.customer.findFirst({ where: { id: data.customerId, tenantId, isActive: true }, select: { id: true } }),
+      this.prisma.user.findFirst({ where: { id: userId, tenantId, status: 'ACTIVE' }, select: { id: true } }),
+    ]);
+    if (!outlet) throw new BadRequestException('Outlet is not available for this company');
+    if (!customer) throw new BadRequestException('Customer not found for this company');
+    if (!salesRep) throw new BadRequestException('Sales user is not active in this company');
+
+    if (data.items.some((item: any) => typeof item?.productId !== 'string' || !item.productId)) {
+      throw new BadRequestException('Every order item must reference a product');
+    }
+    const productIds = [...new Set(data.items.map((item: any) => item.productId))];
+    const products = await this.prisma.product.findMany({
+      where: { tenantId, id: { in: productIds }, isActive: true },
+      select: { id: true, basePrice: true, taxRate: true },
+    });
+    if (products.length !== productIds.length) {
+      throw new BadRequestException('One or more products are unavailable for this company');
+    }
+    const productsById = new Map(products.map((product) => [product.id, product]));
+
+    // Prices and tax rates are authoritative catalog values. Never trust
+    // client-supplied unitPrice/taxRate: a modified request must not reduce
+    // the order total. Explicit discounts remain subject to validation.
     let subtotal = 0;
     let taxAmount = 0;
+    let itemDiscountTotal = 0;
+    const money = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
     const items = data.items.map((item: any) => {
-      const itemSubtotal = item.quantity * item.unitPrice;
-      const itemTax = itemSubtotal * (item.taxRate || 0) / 100;
-      const itemTotal = itemSubtotal + itemTax - (item.discount || 0);
-      subtotal += itemSubtotal;
-      taxAmount += itemTax;
+      const product = productsById.get(item.productId);
+      if (!product) throw new BadRequestException('One or more products are unavailable for this company');
+      const quantity = Number(item.quantity);
+      const unitPrice = Number(product.basePrice);
+      const taxRate = Number(product.taxRate);
+      const discount = Number(item.discount ?? 0);
+      if (!Number.isFinite(quantity) || quantity <= 0 ||
+          !Number.isFinite(unitPrice) || unitPrice < 0 ||
+          !Number.isFinite(taxRate) || taxRate < 0 || taxRate > 100 ||
+          !Number.isFinite(discount) || discount < 0) {
+        throw new BadRequestException('Order item quantity or discount is invalid');
+      }
+      const itemSubtotal = money(quantity * unitPrice);
+      if (discount > itemSubtotal) {
+        throw new BadRequestException('An item discount cannot exceed its subtotal');
+      }
+      const itemTax = money((itemSubtotal - discount) * taxRate / 100);
+      const itemTotal = money(itemSubtotal + itemTax - discount);
+      subtotal = money(subtotal + itemSubtotal);
+      taxAmount = money(taxAmount + itemTax);
+      itemDiscountTotal = money(itemDiscountTotal + discount);
       return {
-        ...item,
+        productId: item.productId,
+        quantity,
+        unitPrice,
+        taxRate,
+        discount: money(discount),
+        ...(typeof item.notes === 'string' ? { notes: item.notes.slice(0, 1000) } : {}),
         taxAmount: itemTax,
         total: itemTotal,
       };
     });
 
-    const total = subtotal + taxAmount - (data.discount || 0);
+    const orderDiscount = Number(data.discount ?? 0);
+    const preOrderDiscountTotal = money(subtotal + taxAmount - itemDiscountTotal);
+    if (!Number.isFinite(orderDiscount) || orderDiscount < 0 || orderDiscount > preOrderDiscountTotal) {
+      throw new BadRequestException('Order discount must be non-negative and cannot exceed the remaining order total');
+    }
+    const total = money(preOrderDiscountTotal - orderDiscount);
+    let deliveryDate: Date | undefined;
+    if (data.deliveryDate !== undefined && data.deliveryDate !== null && data.deliveryDate !== '') {
+      deliveryDate = new Date(data.deliveryDate);
+      if (Number.isNaN(deliveryDate.getTime())) {
+        throw new BadRequestException('Invalid deliveryDate');
+      }
+    }
     const orderNumber = await this.generateOrderNumber(tenantId);
 
     return this.prisma.order.create({
@@ -76,45 +180,77 @@ export class OrdersService {
         orderNumber,
         customerId: data.customerId,
         salesRepId: userId,
-        source: data.source || 'ERP',
+        source: 'ERP',
         subtotal,
         taxAmount,
-        discount: data.discount || 0,
+        discount: orderDiscount,
         total,
         balanceDue: total,
-        notes: data.notes,
-        deliveryDate: data.deliveryDate,
+        notes: typeof data.notes === 'string' ? data.notes.slice(0, 2000) : undefined,
+        deliveryDate,
         items: {
           create: items,
         },
       },
       include: {
-        customer: true,
-        items: { include: { product: true } },
+        customer: { select: { id: true, code: true, name: true, email: true, phone: true } },
+        items: { include: { product: { select: { id: true, sku: true, name: true, barcode: true, basePrice: true, taxRate: true } } } },
       },
     });
   }
 
-  async updateStatus(id: string, tenantId: string, status: string, approvedBy?: string) {
+  async updateStatus(id: string, tenantId: string, status: string, approvedBy?: string, outletId?: string) {
+    const transitions: Record<string, string[]> = {
+      DRAFT: ['PENDING_APPROVAL', 'APPROVED', 'CANCELLED'],
+      PENDING_APPROVAL: ['APPROVED', 'CANCELLED'],
+      APPROVED: ['PROCESSING', 'CANCELLED', 'RETURNED'],
+      PROCESSING: ['SHIPPED', 'DELIVERED', 'CANCELLED', 'RETURNED'],
+      SHIPPED: ['DELIVERED', 'RETURNED'],
+      DELIVERED: ['RETURNED'],
+      CANCELLED: [],
+      RETURNED: [],
+    };
+    if (!Object.prototype.hasOwnProperty.call(transitions, status)) {
+      throw new BadRequestException('Invalid order status');
+    }
+
+    const where = { id, tenantId, ...(outletId ? { outletId } : {}) };
+    const current = await this.prisma.order.findFirst({
+      where,
+      select: { id: true, status: true },
+    });
+    if (!current) throw new NotFoundException('Order not found');
+    // Repeated requests for the current state are harmless and must not emit
+    // duplicate approval notifications.
+    if (current.status === status) return this.findOne(id, tenantId, outletId);
+    if (!transitions[current.status]?.includes(status)) {
+      throw new BadRequestException(`Order cannot transition from ${current.status} to ${status}`);
+    }
+
     const updateData: any = { status };
     if (status === 'APPROVED') {
       updateData.approvedBy = approvedBy;
       updateData.approvedAt = new Date();
     }
-    const order = await this.prisma.order.update({
-      where: { id },
+    // Compare-and-set the prior status so concurrent status requests cannot
+    // both advance the same order based on a stale read.
+    const changed = await this.prisma.order.updateMany({
+      where: { ...where, status: current.status },
       data: updateData,
-      include: { customer: true, items: { include: { product: true } } },
     });
+    if (changed.count !== 1) {
+      throw new BadRequestException('Order status changed concurrently; reload and try again');
+    }
+    const order = await this.prisma.order.findFirst({
+      where,
+      include: {
+        customer: true,
+        items: { include: { product: { select: { id: true, sku: true, name: true, barcode: true, basePrice: true, taxRate: true } } } },
+      },
+    });
+    if (!order) throw new NotFoundException('Order not found');
 
-    // Sales order confirmation fires here — the moment an order is
-    // APPROVED, not at raw creation (DRAFT/PENDING_APPROVAL isn't a
-    // confirmed sale yet). This single choke point covers orders created
-    // both via OrdersService.create() and via the offline sync processor
-    // (src/sync/processors/sync-event.processor.ts), since both eventually
-    // reach APPROVED through this method. POS is skipped entirely inside
-    // NotificationsService. Fire-and-forget: never let a notification
-    // failure fail the status update itself.
+    // Notify only after the guarded transition actually succeeds.
     if (status === 'APPROVED') {
       this.notifications
         .sendOrderConfirmationIfApplicable({
@@ -125,54 +261,63 @@ export class OrdersService {
           customer: order.customer,
           items: order.items,
         })
-        .catch(() => {
-          // NotificationsService already logs; this catch just guarantees
-          // an unhandled rejection can never surface here.
-        });
-
-      // Push to the assigned sales rep's device(s) — this is the "order
-      // approved/assigned" notification for the Sales App. Distinct from
-      // the customer-facing email/WhatsApp confirmation above: this one
-      // goes to internal staff and fires regardless of source (including
-      // POS), since a sales rep should know when their order clears
-      // approval even if the customer doesn't get a separate message.
+        .catch(() => {});
       this.push
         .sendToUser(tenantId, order.salesRepId, {
           title: 'Order Approved',
           body: `Order ${order.orderNumber} has been approved.`,
           data: { type: 'ORDER_APPROVED', screen: 'order-detail', orderId: order.id },
         })
-        .catch(() => {
-          // PushService already logs; swallow so it never fails the update.
-        });
+        .catch(() => {});
     }
-
     return order;
   }
 
-  async addPayment(id: string, tenantId: string, data: any) {
-    const order = await this.findOne(id, tenantId);
-    const newPaid = Number(order.paidAmount) + Number(data.amount);
-    const balanceDue = Number(order.total) - newPaid;
+  async addPayment(id: string, tenantId: string, data: any, outletId?: string) {
+    const amount = Number(data.amount);
+    if (!Number.isFinite(amount) || amount <= 0 || Math.round(amount * 100) / 100 !== amount) {
+      throw new BadRequestException('Payment amount must be positive and have no more than two decimal places');
+    }
+    const allowedMethods = new Set([
+      'CASH', 'CARD', 'CHEQUE', 'BANK_TRANSFER', 'CREDIT', 'MOBILE_MONEY',
+    ]);
+    if (typeof data.method !== 'string' || !allowedMethods.has(data.method)) {
+      throw new BadRequestException('Invalid payment method');
+    }
+    if (typeof data.createdBy !== 'string' || !data.createdBy) {
+      throw new BadRequestException('Payment actor is required');
+    }
 
-    const [payment] = await this.prisma.$transaction([
-      this.prisma.payment.create({
+    // Apply the balance check and increment in one database transaction. A
+    // read-then-write flow can over-collect when two requests arrive together.
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.order.updateMany({
+        where: {
+          id,
+          tenantId,
+          ...(outletId ? { outletId } : {}),
+          balanceDue: { gte: amount },
+        },
+        data: {
+          paidAmount: { increment: amount },
+          balanceDue: { decrement: amount },
+        },
+      });
+      if (updated.count !== 1) {
+        throw new BadRequestException('Order not found for this company or payment exceeds the outstanding balance');
+      }
+
+      return tx.payment.create({
         data: {
           orderId: id,
-          amount: data.amount,
+          amount,
           method: data.method,
-          reference: data.reference,
-          notes: data.notes,
+          reference: typeof data.reference === 'string' ? data.reference.slice(0, 200) : undefined,
+          notes: typeof data.notes === 'string' ? data.notes.slice(0, 1000) : undefined,
           createdBy: data.createdBy,
         },
-      }),
-      this.prisma.order.update({
-        where: { id },
-        data: { paidAmount: newPaid, balanceDue },
-      }),
-    ]);
-
-    return payment;
+      });
+    });
   }
 
   private async generateOrderNumber(tenantId: string): Promise<string> {

@@ -62,8 +62,26 @@ describe('BillplzPaymentProvider', () => {
       );
     });
 
+    it('rejects a successful API response with a mismatched amount', async () => {
+      mockFetchOnce(200, { id: 'bill_abc', url: 'https://billplz-sandbox.com/bills/bill_abc', paid: false, amount: '4999' });
+
+      await expect(provider.createCheckout(params)).rejects.toThrow(ServiceUnavailableException);
+    });
+
+    it('rejects a successful API response with an untrusted checkout URL', async () => {
+      mockFetchOnce(200, { id: 'bill_abc', url: 'https://attacker.example/bills/bill_abc', paid: false, amount: '5000' });
+
+      await expect(provider.createCheckout(params)).rejects.toThrow(ServiceUnavailableException);
+    });
+
+    it('rejects a successful API response without a bill ID', async () => {
+      mockFetchOnce(200, { url: 'https://billplz-sandbox.com/bills/bill_abc', paid: false, amount: '5000' });
+
+      await expect(provider.createCheckout(params)).rejects.toThrow(ServiceUnavailableException);
+    });
+
     it('sends Basic auth built from the API key with an empty password', async () => {
-      mockFetchOnce(200, { id: 'bill_abc', url: 'https://x', paid: false, amount: '5000' });
+      mockFetchOnce(200, { id: 'bill_abc', url: 'https://billplz-sandbox.com/bills/bill_abc', paid: false, amount: '5000' });
 
       await provider.createCheckout(params);
 
@@ -83,6 +101,27 @@ describe('BillplzPaymentProvider', () => {
       mockFetchOnce(422, { error: { message: ['Amount must be greater than 100'] } });
 
       await expect(provider.createCheckout(params)).rejects.toThrow(ServiceUnavailableException);
+    });
+
+    it('rejects a configured API base URL outside the trusted Billplz hosts before sending credentials', async () => {
+      process.env.BILLPLZ_BASE_URL = 'https://attacker.example';
+
+      await expect(provider.createCheckout(params)).rejects.toThrow(ServiceUnavailableException);
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it('rejects an HTTP Billplz endpoint to prevent transmitting API credentials insecurely', async () => {
+      process.env.BILLPLZ_BASE_URL = 'http://www.billplz.com';
+
+      await expect(provider.createCheckout(params)).rejects.toThrow(ServiceUnavailableException);
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it('rejects a trusted Billplz hostname with an injected path or query string', async () => {
+      process.env.BILLPLZ_BASE_URL = 'https://www.billplz.com/proxy?to=attacker';
+
+      await expect(provider.createCheckout(params)).rejects.toThrow(ServiceUnavailableException);
+      expect(global.fetch).not.toHaveBeenCalled();
     });
 
     it('throws if BILLPLZ_API_KEY is not configured', async () => {
@@ -113,6 +152,24 @@ describe('BillplzPaymentProvider', () => {
 
       expect(result.status).toBe('PENDING');
       expect(result.paidAt).toBeNull();
+    });
+
+    it('rejects a bill response whose ID differs from the requested reference', async () => {
+      mockFetchOnce(200, { id: 'bill_other', paid: true, amount: '5000', paid_at: '2026-08-30T10:00:00Z' });
+
+      await expect(provider.verifyPayment('bill_abc')).rejects.toThrow(ServiceUnavailableException);
+    });
+
+    it('rejects a malformed bill amount instead of treating it as a valid payment', async () => {
+      mockFetchOnce(200, { id: 'bill_abc', paid: true, amount: 'not-a-number', paid_at: null });
+
+      await expect(provider.verifyPayment('bill_abc')).rejects.toThrow(ServiceUnavailableException);
+    });
+
+    it('rejects an invalid paid_at timestamp', async () => {
+      mockFetchOnce(200, { id: 'bill_abc', paid: true, amount: '5000', paid_at: 'not-a-date' });
+
+      await expect(provider.verifyPayment('bill_abc')).rejects.toThrow(ServiceUnavailableException);
     });
 
     it('throws NotFoundException for a 404 from Billplz', async () => {

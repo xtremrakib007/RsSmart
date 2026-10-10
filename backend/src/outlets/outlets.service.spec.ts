@@ -10,9 +10,9 @@ describe('OutletsService', () => {
 
   beforeEach(() => {
     prisma = {
-      outlet: { findMany: jest.fn(), findFirst: jest.fn(), findUnique: jest.fn(), create: jest.fn(), update: jest.fn() },
+      outlet: { findMany: jest.fn(), findFirst: jest.fn(), findUnique: jest.fn(), create: jest.fn(), update: jest.fn(), updateMany: jest.fn() },
       user: { findFirst: jest.fn() },
-      userOutlet: { findMany: jest.fn(), findUnique: jest.fn(), upsert: jest.fn(), updateMany: jest.fn(), count: jest.fn(), delete: jest.fn() },
+      userOutlet: { findMany: jest.fn(), findUnique: jest.fn(), upsert: jest.fn(), updateMany: jest.fn(), count: jest.fn(), delete: jest.fn(), deleteMany: jest.fn() },
     };
     audit = { log: jest.fn() };
     service = new OutletsService(prisma, audit as any);
@@ -58,6 +58,19 @@ describe('OutletsService', () => {
         service.update(tenantId, 'actor-1', 'outlet-a', { status: 'INACTIVE' as any }),
       ).rejects.toThrow(BadRequestException);
     });
+
+    it('updates only an outlet belonging to the current tenant', async () => {
+      const outlet = { id: 'outlet-a', tenantId, isDefault: false, name: 'Old' };
+      prisma.outlet.findFirst.mockResolvedValue(outlet);
+      prisma.outlet.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.update(tenantId, 'actor-1', 'outlet-a', { name: 'New' } as any);
+
+      expect(prisma.outlet.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: { id: 'outlet-a', tenantId },
+      }));
+      expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ tenantId, action: 'UPDATE' }));
+    });
   });
 
   describe('assignUser', () => {
@@ -79,7 +92,7 @@ describe('OutletsService', () => {
       await service.assignUser(tenantId, 'actor-1', 'outlet-b', 'user-1', true);
 
       expect(prisma.userOutlet.updateMany).toHaveBeenCalledWith({
-        where: { userId: 'user-1', isDefault: true },
+        where: { tenantId, userId: 'user-1', isDefault: true },
         data: { isDefault: false },
       });
     });
@@ -98,9 +111,11 @@ describe('OutletsService', () => {
       prisma.outlet.findFirst.mockResolvedValue({ id: 'outlet-a', tenantId });
       prisma.userOutlet.findUnique.mockResolvedValue({ id: 'assignment-1', tenantId, userId: 'user-1', outletId: 'outlet-a' });
       prisma.userOutlet.count.mockResolvedValue(2);
-      prisma.userOutlet.delete.mockResolvedValue({});
+      prisma.userOutlet.deleteMany.mockResolvedValue({ count: 1 });
 
       const result = await service.unassignUser(tenantId, 'actor-1', 'outlet-a', 'user-1');
+      expect(prisma.userOutlet.count).toHaveBeenCalledWith({ where: { tenantId, userId: 'user-1' } });
+      expect(prisma.userOutlet.deleteMany).toHaveBeenCalledWith({ where: { id: 'assignment-1', tenantId, outletId: 'outlet-a', userId: 'user-1' } });
       expect(result.success).toBe(true);
     });
   });

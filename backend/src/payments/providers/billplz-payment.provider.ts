@@ -45,9 +45,25 @@ export class BillplzPaymentProvider implements PaymentProviderAdapter {
     return id;
   }
 
-  /** Sandbox vs production Billplz base URL — https://www.billplz-sandbox.com for testing. */
+  /**
+   * Sandbox vs production Billplz base URL. Never send the API key to an
+   * arbitrary host supplied through environment configuration.
+   */
   private get baseUrl(): string {
-    return process.env.BILLPLZ_BASE_URL || 'https://www.billplz.com';
+    const configured = process.env.BILLPLZ_BASE_URL || 'https://www.billplz.com';
+    let parsed: URL;
+    try {
+      parsed = new URL(configured);
+    } catch {
+      throw new ServiceUnavailableException('BILLPLZ_BASE_URL is invalid');
+    }
+    const allowedHosts = new Set(['www.billplz.com', 'www.billplz-sandbox.com']);
+    if (parsed.protocol !== 'https:' || !allowedHosts.has(parsed.hostname.toLowerCase()) ||
+        parsed.username || parsed.password || parsed.port || (parsed.pathname !== '/' && parsed.pathname !== '') ||
+        parsed.search || parsed.hash) {
+      throw new ServiceUnavailableException('BILLPLZ_BASE_URL must be an approved HTTPS Billplz endpoint');
+    }
+    return parsed.origin;
   }
 
   private authHeader(): string {
@@ -87,11 +103,20 @@ export class BillplzPaymentProvider implements PaymentProviderAdapter {
       throw new ServiceUnavailableException(data?.error?.message?.[0] || `Billplz checkout creation failed (${response.status})`);
     }
 
+    const returnedReference = typeof data?.id === 'string' ? data.id.trim() : '';
+    const returnedAmount = this.parseMinorAmount(data?.amount);
+    const checkoutUrl = this.validateCheckoutUrl(data?.url);
+    if (!returnedReference || returnedReference.includes(' ') || returnedReference.includes('/') ||
+        returnedReference.includes('\\') || returnedReference.includes('?') || returnedReference.includes('#') ||
+        returnedAmount !== params.amount.amount || !checkoutUrl) {
+      throw new ServiceUnavailableException('Billplz returned an invalid or mismatched checkout response');
+    }
+
     return {
-      providerReference: data.id,
-      checkoutUrl: data.url,
+      providerReference: returnedReference,
+      checkoutUrl,
       status: this.mapStatus(data),
-      amount: { amount: params.amount.amount, currency: 'MYR' },
+      amount: { amount: returnedAmount, currency: 'MYR' },
     };
   }
 
@@ -105,11 +130,19 @@ export class BillplzPaymentProvider implements PaymentProviderAdapter {
       throw new ServiceUnavailableException(data?.error?.message?.[0] || `Billplz bill lookup failed (${response.status})`);
     }
 
+    const returnedReference = typeof data?.id === 'string' ? data.id.trim() : '';
+    const amount = this.parseMinorAmount(data?.amount);
+    const paidAt = data?.paid_at ? new Date(data.paid_at) : null;
+    if (!returnedReference || returnedReference !== providerReference ||
+        amount === null || (data?.paid_at && (!paidAt || Number.isNaN(paidAt.getTime())))) {
+      throw new ServiceUnavailableException('Billplz returned an invalid or mismatched bill response');
+    }
+
     return {
-      providerReference,
+      providerReference: returnedReference,
       status: this.mapStatus(data),
-      amount: { amount: Number(data.amount), currency: 'MYR' },
-      paidAt: data.paid_at ? new Date(data.paid_at) : null,
+      amount: { amount, currency: 'MYR' },
+      paidAt,
     };
   }
 
@@ -133,7 +166,36 @@ export class BillplzPaymentProvider implements PaymentProviderAdapter {
    * decision for the caller based on `due_at`, not something Billplz's
    * API tells us directly.
    */
+  private parseMinorAmount(value: unknown): number | null {
+    if (!(typeof value === 'number' || (typeof value === 'string' && /^\d+$/.test(value)))) {
+      return null;
+    }
+    const amount = Number(value);
+    return Number.isSafeInteger(amount) && amount > 0 ? amount : null;
+  }
+
+  private validateCheckoutUrl(value: unknown): string | null {
+    if (typeof value !== 'string' || !value.trim()) return null;
+    try {
+      const url = new URL(value);
+      const allowedHosts = new Set([
+        'billplz.com',
+        'www.billplz.com',
+        'billplz-sandbox.com',
+        'www.billplz-sandbox.com',
+      ]);
+      if (url.protocol !== 'https:' || !allowedHosts.has(url.hostname.toLowerCase()) ||
+          url.username || url.password || url.port || url.search || url.hash ||
+          !url.pathname.startsWith('/bills/')) {
+        return null;
+      }
+      return url.toString();
+    } catch {
+      return null;
+    }
+  }
+
   private mapStatus(data: any): PaymentStatus {
-    return data?.paid ? 'SUCCEEDED' : 'PENDING';
+    return data?.paid === true ? 'SUCCEEDED' : 'PENDING';
   }
 }

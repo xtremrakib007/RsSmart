@@ -15,12 +15,14 @@ export class OutletsController {
   constructor(private readonly outlets: OutletsService) {}
 
   @Get()
+  @RequirePermissions(Permission.OUTLETS_READ)
   @ApiOperation({ summary: "List the current company's outlets" })
   list(@CurrentUser() user: any) {
     return this.outlets.list(user.tenantId);
   }
 
   @Get(':id')
+  @RequirePermissions(Permission.OUTLETS_READ)
   @ApiOperation({ summary: 'Get a single outlet' })
   get(@CurrentUser() user: any, @Param('id') id: string) {
     return this.outlets.get(user.tenantId, id);

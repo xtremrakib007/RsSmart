@@ -5,6 +5,8 @@ import { CurrentUser } from '../common/decorators/user.decorator';
 import { CurrentOutlet } from '../common/decorators/outlet.decorator';
 import { OutletGuard } from '../common/guards/outlet.guard';
 import { Roles } from '../common/decorators/roles.decorator';
+import { RequirePermissions } from '../common/decorators/permissions.decorator';
+import { Permission } from '../common/permissions/permission.enum';
 
 @ApiTags('Orders')
 @ApiBearerAuth()
@@ -13,30 +15,40 @@ export class OrdersController {
   constructor(private ordersService: OrdersService) {}
 
   @Get()
+  @RequirePermissions(Permission.SALES_READ)
   @ApiOperation({ summary: 'Get all orders' })
   @ApiQuery({ name: 'status', required: false })
   @ApiQuery({ name: 'customerId', required: false })
   @ApiQuery({ name: 'outletId', required: false })
   @ApiQuery({ name: 'fromDate', required: false })
   @ApiQuery({ name: 'toDate', required: false })
+  @ApiQuery({ name: 'page', required: false, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, example: 50, description: 'Maximum 100 records per request' })
+  @UseGuards(OutletGuard)
   findAll(
     @CurrentUser() user: any,
+    @CurrentOutlet() outlet: any,
     @Query('status') status?: string,
     @Query('customerId') customerId?: string,
     @Query('outletId') outletId?: string,
     @Query('fromDate') fromDate?: string,
     @Query('toDate') toDate?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
-    return this.ordersService.findAll(user.tenantId, { status, customerId, outletId, fromDate, toDate });
+    return this.ordersService.findAll(user.tenantId, { status, customerId, outletId: outlet.id, fromDate, toDate, page, limit });
   }
 
   @Get(':id')
+  @RequirePermissions(Permission.SALES_READ)
   @ApiOperation({ summary: 'Get order by ID' })
-  findOne(@Param('id') id: string, @CurrentUser() user: any) {
-    return this.ordersService.findOne(id, user.tenantId);
+  @UseGuards(OutletGuard)
+  findOne(@Param('id') id: string, @CurrentUser() user: any, @CurrentOutlet() outlet: any) {
+    return this.ordersService.findOne(id, user.tenantId, outlet.id);
   }
 
   @Post()
+  @RequirePermissions(Permission.SALES_CREATE)
   @UseGuards(OutletGuard)
   @ApiHeader({ name: 'x-outlet-id', required: false, description: "Which outlet this order belongs to; defaults to the user's default outlet" })
   @ApiOperation({ summary: 'Create order at an outlet' })
@@ -45,19 +57,24 @@ export class OrdersController {
   }
 
   @Put(':id/status')
+  @RequirePermissions(Permission.SALES_CREATE)
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Update order status' })
+  @UseGuards(OutletGuard)
   updateStatus(
     @Param('id') id: string,
     @Body('status') status: string,
     @CurrentUser() user: any,
+    @CurrentOutlet() outlet: any,
   ) {
-    return this.ordersService.updateStatus(id, user.tenantId, status, user.userId);
+    return this.ordersService.updateStatus(id, user.tenantId, status, user.userId, outlet.id);
   }
 
   @Post(':id/payments')
+  @RequirePermissions(Permission.PAYMENTS_COLLECT)
   @ApiOperation({ summary: 'Add payment to order' })
-  addPayment(@Param('id') id: string, @Body() data: any, @CurrentUser() user: any) {
-    return this.ordersService.addPayment(id, user.tenantId, { ...data, createdBy: user.userId });
+  @UseGuards(OutletGuard)
+  addPayment(@Param('id') id: string, @Body() data: any, @CurrentUser() user: any, @CurrentOutlet() outlet: any) {
+    return this.ordersService.addPayment(id, user.tenantId, { ...data, createdBy: user.userId }, outlet.id);
   }
 }

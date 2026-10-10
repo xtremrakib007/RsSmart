@@ -43,22 +43,63 @@ export class ProductsService {
   }
 
   async create(tenantId: string, data: any) {
+    // Foreign keys must belong to this tenant; UUIDs are not authorization.
+    if (data.categoryId) {
+      const category = await this.prisma.category.findFirst({ where: { id: data.categoryId, tenantId } });
+      if (!category) throw new BadRequestException('Category not found for this company');
+    }
+    if (data.unitId) {
+      const unit = await this.prisma.unit.findFirst({ where: { id: data.unitId, tenantId } });
+      if (!unit) throw new BadRequestException('Unit not found for this company');
+    }
+
+    if (typeof data.sku !== 'string' || !data.sku.trim() ||
+        typeof data.name !== 'string' || !data.name.trim() ||
+        !Number.isFinite(Number(data.basePrice)) || Number(data.basePrice) < 0) {
+      throw new BadRequestException('Product SKU, name, and a non-negative base price are required');
+    }
     const existing = await this.prisma.product.findUnique({
       where: { tenantId_sku: { tenantId, sku: data.sku } },
     });
     if (existing) throw new BadRequestException('SKU already exists');
 
+    const allowed = [
+      'sku', 'name', 'description', 'barcode', 'categoryId', 'unitId',
+      'basePrice', 'costPrice', 'taxRate', 'isActive', 'trackInventory',
+      'minStock', 'maxStock', 'attributes', 'images',
+    ];
+    const safeData = Object.fromEntries(
+      allowed.filter((key) => Object.prototype.hasOwnProperty.call(data, key)).map((key) => [key, data[key]]),
+    );
     return this.prisma.product.create({
-      data: { ...data, tenantId },
+      data: { ...safeData, tenantId },
       include: { category: true, unit: true },
     });
   }
 
   async update(id: string, tenantId: string, data: any) {
     await this.findOne(id, tenantId);
+    // Never spread request bodies into Prisma updates: this prevents clients
+    // from changing tenantId or writing server-managed fields.
+    if (data.categoryId) {
+      const category = await this.prisma.category.findFirst({ where: { id: data.categoryId, tenantId } });
+      if (!category) throw new BadRequestException('Category not found for this company');
+    }
+    if (data.unitId) {
+      const unit = await this.prisma.unit.findFirst({ where: { id: data.unitId, tenantId } });
+      if (!unit) throw new BadRequestException('Unit not found for this company');
+    }
+    const allowed = [
+      'sku', 'name', 'description', 'barcode', 'categoryId', 'unitId',
+      'basePrice', 'costPrice', 'taxRate', 'isActive', 'trackInventory',
+      'minStock', 'maxStock', 'attributes', 'images',
+    ];
+    const safeData = Object.fromEntries(
+      allowed.filter((key) => Object.prototype.hasOwnProperty.call(data, key)).map((key) => [key, data[key]]),
+    );
     return this.prisma.product.update({
-      where: { id },
-      data,
+      where: { id, tenantId },
+      data: safeData,
       include: { category: true, unit: true },
     });
   }
@@ -66,7 +107,7 @@ export class ProductsService {
   async remove(id: string, tenantId: string) {
     await this.findOne(id, tenantId);
     return this.prisma.product.update({
-      where: { id },
+      where: { id, tenantId },
       data: { isActive: false },
     });
   }

@@ -4,6 +4,14 @@ import * as bcrypt from 'bcrypt';
 const prisma = new PrismaClient();
 
 async function main() {
+  // This seed creates publicly predictable demo identities and must never run in production.
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('Refusing to run demo seed in production');
+  }
+  const seedPassword = process.env.DEMO_SEED_PASSWORD;
+  if (!seedPassword || seedPassword.length < 16) {
+    throw new Error('Set DEMO_SEED_PASSWORD to a value of at least 16 characters before running the demo seed');
+  }
   console.log('🌱 Starting database seed...');
 
   // ─── TENANT ─────────────────────────────────────────────
@@ -28,9 +36,9 @@ async function main() {
   const roles = await prisma.role.createMany({
     data: [
       { tenantId: tenant.id, name: 'admin', description: 'Full system access', permissions: ['*'], isSystem: true },
-      { tenantId: tenant.id, name: 'manager', description: 'Manage operations', permissions: ['users.read', 'users.write', 'products.*', 'orders.*', 'customers.*', 'reports.*'], isSystem: true },
+      { tenantId: tenant.id, name: 'manager', description: 'Manage operations', permissions: ['users.read', 'users.write', 'products.*', 'orders.*', 'customers.*', 'payments.collect', 'payments.refund', 'inventory.read', 'inventory.adjust', 'outlets.read', 'reports.*'], isSystem: true },
       { tenantId: tenant.id, name: 'sales_rep', description: 'Field sales', permissions: ['customers.*', 'orders.create', 'orders.read', 'visits.*'], isSystem: true },
-      { tenantId: tenant.id, name: 'cashier', description: 'POS operations', permissions: ['pos.*', 'products.read', 'customers.read'], isSystem: true },
+      { tenantId: tenant.id, name: 'cashier', description: 'POS operations', permissions: ['pos.*', 'products.read', 'customers.read', 'inventory.read'], isSystem: true },
       { tenantId: tenant.id, name: 'accountant', description: 'Financial operations', permissions: ['orders.read', 'payments.*', 'reports.*'], isSystem: true },
     ],
   });
@@ -42,7 +50,7 @@ async function main() {
   const cashierRole = await prisma.role.findFirst({ where: { tenantId: tenant.id, name: 'cashier' } });
 
   // ─── USERS ──────────────────────────────────────────────
-  const hashedPassword = await bcrypt.hash('password123', 12);
+  const hashedPassword = await bcrypt.hash(seedPassword, 12);
 
   const users = await prisma.user.createMany({
     data: [

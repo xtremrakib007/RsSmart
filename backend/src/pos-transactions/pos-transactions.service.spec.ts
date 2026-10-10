@@ -42,7 +42,7 @@ describe('PosTransactionsService — Idempotency (Phase 25)', () => {
 
   beforeEach(async () => {
     prisma = {
-      posSession: { findFirst: jest.fn() },
+      posSession: { findFirst: jest.fn(), updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
       customer: { findFirst: jest.fn(), create: jest.fn() },
       product: { findMany: jest.fn() },
       order: {
@@ -87,6 +87,7 @@ describe('PosTransactionsService — Idempotency (Phase 25)', () => {
       const existingOrder = {
         id: 'order-1',
         tenantId,
+        outletId: 'outlet-1',
         orderNumber: 'POS-202408-00001',
         source: 'POS',
       };
@@ -100,6 +101,12 @@ describe('PosTransactionsService — Idempotency (Phase 25)', () => {
       });
       expect(prisma.order.create).not.toHaveBeenCalled();
       expect(result.receiptNumber).toBe(existingOrder.orderNumber);
+    });
+
+    it('rejects reuse of an idempotency key from another outlet', async () => {
+      prisma.order.findUnique.mockResolvedValue({ id: 'other-outlet-order', tenantId, outletId: 'outlet-2', orderNumber: 'POS-202408-00001' });
+      await expect(service.checkout(tenantId, userId, checkoutPayload, 'outlet-1')).rejects.toThrow('clientTransactionId is already used by a sale at another outlet');
+      expect(prisma.order.create).not.toHaveBeenCalled();
     });
 
     it('should create a new order when clientTransactionId is new', async () => {
@@ -123,6 +130,7 @@ describe('PosTransactionsService — Idempotency (Phase 25)', () => {
         .mockResolvedValueOnce({
           id: 'order-race',
           tenantId,
+          outletId: 'outlet-1',
           orderNumber: 'POS-202408-00003',
         });
 
@@ -188,7 +196,7 @@ describe('PosTransactionsService — Concurrent Stock Deduction (Phase 26)', () 
 
   beforeEach(async () => {
     prisma = {
-      posSession: { findFirst: jest.fn() },
+      posSession: { findFirst: jest.fn(), updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
       customer: { findFirst: jest.fn(), create: jest.fn() },
       product: { findMany: jest.fn() },
       order: {
@@ -272,5 +280,259 @@ describe('PosTransactionsService — Concurrent Stock Deduction (Phase 26)', () 
     await expect(service.checkout(tenantId, userId, checkoutPayload)).rejects.toThrow(
       'Insufficient stock for Test Product. Available: 2',
     );
+  });
+});
+
+describe('PosTransactionsService — Checkout validation hardening', () => {
+  let service: PosTransactionsService;
+  let prisma: any;
+  const tenantId = 'tenant-1';
+  const userId = 'user-1';
+  const sessionId = 'session-1';
+  const productId = 'product-1';
+
+  beforeEach(() => {
+    prisma = {
+      posSession: { findFirst: jest.fn().mockResolvedValue({ id: sessionId, outletId: 'outlet-1', status: 'OPEN' }), updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      customer: { findFirst: jest.fn().mockResolvedValue({ id: 'customer-1', isActive: true }), create: jest.fn() },
+      product: { findMany: jest.fn().mockResolvedValue([{ id: productId, name: 'Test', basePrice: 10, taxRate: 0, trackInventory: false }]) },
+      order: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn(), count: jest.fn() },
+      inventory: { findFirst: jest.fn() },
+      stockMovement: { create: jest.fn() },
+      payment: { create: jest.fn() },
+      posCashMovement: { create: jest.fn() },
+      $transaction: jest.fn(),
+    };
+    service = new PosTransactionsService({} as any);
+    (service as any).prisma = prisma;
+  });
+
+  const payload = (overrides: any = {}) => ({
+    sessionId,
+    items: [{ productId, quantity: 1, unitPrice: 0 }],
+    payments: [{ method: 'CASH', amount: 10 }],
+    ...overrides,
+  });
+
+  it('rejects client payloads that contain more than 100 items', async () => {
+    await expect(service.checkout(tenantId, userId, payload({
+      items: Array.from({ length: 101 }, () => ({ productId, quantity: 1 })),
+    }))).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.product.findMany).not.toHaveBeenCalled();
+  });
+
+  it('rejects discounts that exceed the catalog-priced subtotal', async () => {
+    await expect(service.checkout(tenantId, userId, payload({
+      items: [{ productId, quantity: 1, unitPrice: 0, discount: 10.01 }],
+    }))).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.order.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects payments greater than the server-calculated total', async () => {
+    await expect(service.checkout(tenantId, userId, payload({
+      payments: [{ method: 'CASH', amount: 10.01 }],
+    }))).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.order.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects non-boolean allowCredit values rather than treating strings as approval', async () => {
+    await expect(service.checkout(tenantId, userId, payload({
+      allowCredit: 'false',
+      payments: [],
+    }))).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.order.create).not.toHaveBeenCalled();
+  });
+});
+
+
+describe('PosTransactionsService — Refund safety', () => {
+  let service: PosTransactionsService;
+  let prisma: any;
+  const tenantId = 'tenant-1';
+  const userId = 'user-1';
+  const orderId = 'order-1';
+  const sessionId = 'session-1';
+  const order = {
+    id: orderId, tenantId, source: 'POS', status: 'APPROVED', outletId: 'outlet-1',
+    orderNumber: 'POS-202610-00001', total: 20, paidAmount: 20, balanceDue: 0,
+    items: [{ productId: 'product-1', quantity: 2, product: { trackInventory: true } }],
+  };
+
+  beforeEach(() => {
+    prisma = {
+      order: {
+        findFirst: jest.fn().mockResolvedValue(order),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+      posSession: { findFirst: jest.fn().mockResolvedValue({ id: sessionId, outletId: 'outlet-1' }), updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      inventory: { findFirst: jest.fn().mockResolvedValue({ id: 'inventory-1' }), update: jest.fn() },
+      stockMovement: { findFirst: jest.fn().mockResolvedValue({ inventoryId: 'inventory-1' }), create: jest.fn() },
+      payment: { create: jest.fn() },
+      posCashMovement: { create: jest.fn() },
+      $transaction: jest.fn((fn: any) => fn(prisma)),
+    };
+    service = new PosTransactionsService({} as any);
+    (service as any).prisma = prisma;
+  });
+
+  it('rejects partial refunds because this flow restores all items and closes the sale', async () => {
+    await expect(service.refund(tenantId, userId, orderId, { sessionId, amount: 10 }))
+      .rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(prisma.inventory.update).not.toHaveBeenCalled();
+    expect(prisma.payment.create).not.toHaveBeenCalled();
+  });
+
+  it.each([NaN, Infinity, 0, -1, 20.001])('rejects invalid refund amount %s', async amount => {
+    await expect(service.refund(tenantId, userId, orderId, { sessionId, amount }))
+      .rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('does not mutate inventory or create payment if another refund already claimed the order', async () => {
+    prisma.order.updateMany.mockResolvedValue({ count: 0 });
+    await expect(service.refund(tenantId, userId, orderId, { sessionId }))
+      .rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.inventory.update).not.toHaveBeenCalled();
+    expect(prisma.stockMovement.create).not.toHaveBeenCalled();
+    expect(prisma.payment.create).not.toHaveBeenCalled();
+  });
+
+  it('restores tracked stock to the inventory row used by the original sale', async () => {
+    prisma.order.findFirst.mockResolvedValue({
+      ...order,
+      items: [{ productId: 'product-1', quantity: 2, product: { trackInventory: true } }],
+    });
+    prisma.stockMovement.findFirst.mockResolvedValue({ inventoryId: 'inventory-original-sale' });
+    prisma.inventory.findFirst.mockResolvedValue({ id: 'inventory-original-sale' });
+
+    await service.refund(tenantId, userId, orderId, { sessionId, warehouseId: 'attacker-selected-warehouse' });
+
+    expect(prisma.stockMovement.findFirst).toHaveBeenCalledWith({
+      where: {
+        tenantId, referenceId: orderId, referenceType: 'POS_ORDER',
+        inventory: { productId: 'product-1' },
+      },
+      select: { inventoryId: true },
+    });
+    expect(prisma.inventory.findFirst).toHaveBeenCalledWith({
+      where: { id: 'inventory-original-sale', tenantId, outletId: 'outlet-1', productId: 'product-1' },
+    });
+    expect(prisma.inventory.update).toHaveBeenCalledWith({
+      where: { id: 'inventory-original-sale' },
+      data: { quantity: { increment: 2 }, version: { increment: 1 } },
+    });
+  });
+
+  it('rejects refunds for orders that are not completed POS sales', async () => {
+    prisma.order.findFirst.mockResolvedValue({ ...order, status: 'CANCELLED' });
+    await expect(service.refund(tenantId, userId, orderId, { sessionId }))
+      .rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+});
+
+describe('PosTransactionsService — Cash movement validation', () => {
+  let service: PosTransactionsService;
+  let prisma: any;
+  const tenantId = 'tenant-1';
+  const userId = 'user-1';
+  const sessionId = 'session-1';
+
+  beforeEach(() => {
+    prisma = {
+      posSession: { findFirst: jest.fn().mockResolvedValue({ id: sessionId, tenantId, userId, outletId: 'outlet-1', status: 'OPEN' }), updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      posCashMovement: { create: jest.fn().mockResolvedValue({ id: 'movement-1' }) },
+      $transaction: jest.fn((fn: any) => fn(prisma)),
+    };
+    service = new PosTransactionsService({} as any);
+    (service as any).prisma = prisma;
+  });
+
+  it.each([0, -1, NaN, Infinity, 1.001, 10.999])('rejects invalid cash movement amount %s', async amount => {
+    await expect(service.cashMovement(tenantId, userId, { sessionId, type: 'IN', amount }))
+      .rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.posCashMovement.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects invalid movement type and missing session ID', async () => {
+    await expect(service.cashMovement(tenantId, userId, { sessionId, type: 'SALE', amount: 1 }))
+      .rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.cashMovement(tenantId, userId, { type: 'IN', amount: 1 }))
+      .rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.posSession.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('rejects oversized or non-text optional fields', async () => {
+    await expect(service.cashMovement(tenantId, userId, {
+      sessionId, type: 'OUT', amount: 1, notes: 'x'.repeat(2001),
+    })).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.cashMovement(tenantId, userId, {
+      sessionId, type: 'OUT', amount: 1, referenceId: { unexpected: true },
+    })).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.posCashMovement.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects a cash movement if the session has already been closed', async () => {
+    prisma.posSession.updateMany.mockResolvedValue({ count: 0 });
+    await expect(service.cashMovement(tenantId, userId, {
+      sessionId, type: 'IN', amount: 5,
+    })).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.posCashMovement.create).not.toHaveBeenCalled();
+  });
+
+  it('creates a valid movement scoped to the caller’s open tenant session', async () => {
+    await service.cashMovement(tenantId, userId, {
+      sessionId, type: 'IN', amount: 12.5, notes: 'Till float',
+    });
+    expect(prisma.posSession.findFirst).toHaveBeenCalledWith({
+      where: { id: sessionId, tenantId, userId, status: 'OPEN' },
+    });
+    expect(prisma.posCashMovement.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        tenantId, outletId: 'outlet-1', sessionId, type: 'IN', amount: 12.5,
+        notes: 'Till float', createdBy: userId,
+      }),
+    });
+  });
+});
+
+describe('PosTransactionsService — Refund accounting integrity', () => {
+  let service: PosTransactionsService;
+  let prisma: any;
+
+  beforeEach(() => {
+    prisma = {
+      order: { findFirst: jest.fn() },
+      posSession: { findFirst: jest.fn() },
+      $transaction: jest.fn((fn: any) => fn(prisma)),
+    };
+    service = new PosTransactionsService(prisma as any);
+  });
+
+  it('rejects a full-stock refund when the original sale still has an unpaid balance', async () => {
+    prisma.order.findFirst.mockResolvedValue({
+      id: 'order-1',
+      tenantId: 'tenant-1',
+      outletId: 'outlet-1',
+      orderNumber: 'POS-001',
+      status: 'APPROVED',
+      total: 100,
+      paidAmount: 50,
+      balanceDue: 50,
+      items: [],
+    });
+    prisma.posSession.findFirst.mockResolvedValue({
+      id: 'session-1',
+      tenantId: 'tenant-1',
+      outletId: 'outlet-1',
+      userId: 'user-1',
+      status: 'OPEN',
+    });
+
+    await expect(
+      service.refund('tenant-1', 'user-1', 'order-1', { sessionId: 'session-1' }, 'outlet-1'),
+    ).rejects.toThrow('A full POS refund requires the sale to be fully paid with no outstanding balance');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 });
