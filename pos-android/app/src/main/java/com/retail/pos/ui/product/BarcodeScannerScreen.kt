@@ -15,6 +15,10 @@ import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.common.InputImage
 import com.retail.pos.viewmodel.CartViewModel
@@ -30,6 +34,16 @@ fun BarcodeScannerScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     var scanned by remember { mutableStateOf(false) }
     var lastBarcode by remember { mutableStateOf("") }
+    var cameraGranted by remember {
+        mutableStateOf(ContextCompat.checkSelfPermission(
+            androidx.compose.ui.platform.LocalContext.current,
+            Manifest.permission.CAMERA
+        ) == PackageManager.PERMISSION_GRANTED)
+    }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted -> cameraGranted = granted }
 
     Scaffold(
         topBar = {
@@ -44,6 +58,7 @@ fun BarcodeScannerScreen(
         }
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+            if (cameraGranted) {
             AndroidView(
                 factory = { ctx ->
                     val previewView = PreviewView(ctx)
@@ -95,9 +110,22 @@ fun BarcodeScannerScreen(
                 },
                 modifier = Modifier.fillMaxSize()
             )
+            } else {
+                Column(
+                    modifier = Modifier.fillMaxSize().padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text("Camera access is needed to scan product barcodes.")
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Button(onClick = { cameraPermissionLauncher.launch(Manifest.permission.CAMERA) }) {
+                        Text("Allow Camera")
+                    }
+                }
+            }
 
             // Overlay
-            Box(
+            if (cameraGranted) Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
