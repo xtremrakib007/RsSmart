@@ -4,12 +4,14 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -28,6 +30,7 @@ fun ProductCatalogScreen(
     val itemCount by viewModel.itemCount.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     var showScanner by remember { mutableStateOf(false) }
+    var showAddProduct by remember { mutableStateOf(false) }
     var priceCheckMode by remember { mutableStateOf(false) }
 
     if (showScanner) {
@@ -47,6 +50,9 @@ fun ProductCatalogScreen(
             TopAppBar(
                 title = { Text(if (priceCheckMode) "Price Check" else "New Sale") },
                 actions = {
+                    IconButton(onClick = { showAddProduct = true }, enabled = !priceCheckMode) {
+                        Icon(Icons.Default.AddBox, contentDescription = "Add product")
+                    }
                     TextButton(onClick = { priceCheckMode = !priceCheckMode }) {
                         Text(if (priceCheckMode) "Back to sale" else "Price check")
                     }
@@ -84,7 +90,7 @@ fun ProductCatalogScreen(
             )
             if (priceCheckMode) {
                 Text(
-                    "PRICE CHECK  •  Scan or search to see the shelf price without adding items to the sale.",
+                    "PRICE CHECK • Scan or search to see the shelf price without adding items to the sale.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
@@ -96,7 +102,11 @@ fun ProductCatalogScreen(
                         Icon(Icons.Default.Inventory2, contentDescription = null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.outline)
                         Spacer(Modifier.height(8.dp))
                         Text(if (searchQuery.isBlank()) "No products loaded for this outlet" else "No product found")
-                        Text("Check your product catalogue and sync connection.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                        Text("Add a product to start testing the register.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                        if (!priceCheckMode) {
+                            Spacer(Modifier.height(12.dp))
+                            Button(onClick = { showAddProduct = true }) { Text("Add first product") }
+                        }
                     }
                 }
             } else {
@@ -118,6 +128,15 @@ fun ProductCatalogScreen(
                 }
             }
         }
+    }
+
+    if (showAddProduct) {
+        ProductCreateDialog(
+            onDismiss = { showAddProduct = false },
+            onSave = { name, sku, barcode, price, cost, stock, taxPercent, unit, done ->
+                viewModel.createProduct(name, sku, barcode, price, cost, stock, taxPercent, unit, done)
+            }
+        )
     }
 }
 
@@ -145,4 +164,66 @@ fun ProductCard(product: Product, cartQty: Double, priceCheckMode: Boolean = fal
             }
         }
     }
+}
+
+@Composable
+private fun ProductCreateDialog(
+    onDismiss: () -> Unit,
+    onSave: (String, String, String?, Double, Double?, Double, Double, String, (String?) -> Unit) -> Unit
+) {
+    var name by remember { mutableStateOf("") }
+    var sku by remember { mutableStateOf("") }
+    var barcode by remember { mutableStateOf("") }
+    var price by remember { mutableStateOf("") }
+    var cost by remember { mutableStateOf("") }
+    var stock by remember { mutableStateOf("0") }
+    var tax by remember { mutableStateOf("0") }
+    var unit by remember { mutableStateOf("PCS") }
+    var error by remember { mutableStateOf<String?>(null) }
+    var saving by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = { if (!saving) onDismiss() },
+        title = { Text("Add product") },
+        text = {
+            Column {
+                Text("Product details are stored on this device. Backend product sync must be configured before using this for live multi-device inventory.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(name, { name = it }, label = { Text("Product name *") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(sku, { sku = it }, label = { Text("SKU / PLU *") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(barcode, { barcode = it }, label = { Text("Barcode (optional)") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(price, { price = it }, label = { Text("Selling price (RM) *") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(cost, { cost = it }, label = { Text("Cost price (RM, optional)") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(stock, { stock = it }, label = { Text("Opening stock") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(tax, { tax = it }, label = { Text("Tax rate (%) — configure for your business") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(unit, { unit = it }, label = { Text("Unit (PCS, KG, L)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                if (error != null) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(error!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                enabled = !saving,
+                onClick = {
+                    val parsedPrice = price.toDoubleOrNull()
+                    val parsedCost = cost.takeIf { it.isNotBlank() }?.toDoubleOrNull()
+                    val parsedStock = stock.toDoubleOrNull()
+                    val parsedTax = tax.toDoubleOrNull()
+                    if (name.isBlank() || sku.isBlank() || parsedPrice == null || parsedStock == null || parsedTax == null ||
+                        (cost.isNotBlank() && parsedCost == null)) {
+                        error = "Enter a name, SKU, valid price, stock and tax rate."
+                    } else {
+                        saving = true
+                        onSave(name, sku, barcode, parsedPrice, parsedCost, parsedStock, parsedTax, unit) { result ->
+                            saving = false
+                            if (result == null) onDismiss() else error = result
+                        }
+                    }
+                }
+            ) { if (saving) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp) else Text("Save product") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss, enabled = !saving) { Text("Cancel") } }
+    )
 }
