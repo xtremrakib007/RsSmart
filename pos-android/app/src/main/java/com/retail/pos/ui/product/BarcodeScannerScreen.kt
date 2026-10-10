@@ -33,9 +33,10 @@ fun BarcodeScannerScreen(
     viewModel: CartViewModel = hiltViewModel()
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
+    val context = androidx.compose.ui.platform.LocalContext.current
     var scanned by remember { mutableStateOf(false) }
     var lastBarcode by remember { mutableStateOf("") }
-    var hasCameraPermission by remember { mutableStateOf(ContextCompat.checkSelfPermission(androidx.compose.ui.platform.LocalContext.current, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) }
+    var hasCameraPermission by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) }
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted -> hasCameraPermission = granted }
 
     LaunchedEffect(Unit) {
