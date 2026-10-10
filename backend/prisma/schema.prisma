@@ -2,7 +2,8 @@
 // Central Database Schema for Multi-Tenant Business System
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["omitApi"]
 }
 
 datasource db {
@@ -646,6 +647,7 @@ model SyncEvent {
   payload        Json
   vectorClock    Json     @map("vector_clock") // { "device_123": 45, "server": 120 }
   status         SyncStatus @default(PENDING)
+  attempts       Int      @default(0)
   processedAt    DateTime? @map("processed_at")
   error          String?
   createdAt      DateTime @default(now()) @map("created_at")
@@ -733,6 +735,7 @@ model WhatsAppAccount {
   provider          String   @default("MOCK")
   providerAccountId String?  @map("provider_account_id")
   phoneNumberId     String?  @map("phone_number_id")
+  accessTokenEncrypted String? @map("access_token_encrypted")
   createdByUserId   String?  @map("created_by_user_id")
   status            WhatsAppAccountStatus @default(DISCONNECTED)
   webhookUrl        String?  @map("webhook_url")
