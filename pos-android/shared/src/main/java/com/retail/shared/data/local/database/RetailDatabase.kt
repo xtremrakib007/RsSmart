@@ -12,9 +12,10 @@ import com.retail.shared.data.local.entity.*
         PosSession::class,
         Payment::class,
         PosOrder::class,
-        OfflineQueueItem::class
+        OfflineQueueItem::class,
+        CustomerEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = true
 )
 abstract class RetailDatabase : RoomDatabase() {
@@ -24,4 +25,5 @@ abstract class RetailDatabase : RoomDatabase() {
     abstract fun orderDao(): OrderDao
     abstract fun offlineQueueDao(): OfflineQueueDao
     abstract fun paymentDao(): PaymentDao
+    abstract fun customerDao(): CustomerDao
 }
