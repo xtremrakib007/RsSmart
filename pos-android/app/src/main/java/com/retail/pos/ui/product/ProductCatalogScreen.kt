@@ -25,6 +25,7 @@ fun ProductCatalogScreen(
     onCheckout: () -> Unit,
     onScanBarcode: () -> Unit,
     onPriceCheck: () -> Unit,
+    onPrinterSettings: () -> Unit,
     navController: NavHostController,
     viewModel: CartViewModel = hiltViewModel()
 ) {
@@ -51,6 +52,7 @@ fun ProductCatalogScreen(
                 title = { Text("Product Catalog") },
                 actions = {
                     TextButton(onClick = onPriceCheck) { Text("Price check") }
+                    TextButton(onClick = onPrinterSettings) { Text("Printer") }
                     IconButton(onClick = onScanBarcode) {
                         Icon(Icons.Default.CameraAlt, contentDescription = "Scan barcode")
                     }
