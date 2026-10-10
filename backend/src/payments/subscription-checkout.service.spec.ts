@@ -387,6 +387,11 @@ describe('SubscriptionCheckoutService', () => {
       );
 
       expect(subscriptions.activate).toHaveBeenCalledWith(tenantId, subscriptionId, 'system:billplz-webhook');
+      expect(prisma.subscriptionCheckout.updateMany).toHaveBeenCalledTimes(2);
+      expect(prisma.subscriptionCheckout.updateMany).toHaveBeenLastCalledWith({
+        where: expect.objectContaining({ id: 'checkout-1', webhookProcessedAt: null }),
+        data: { webhookProcessingAt: null },
+      });
       expect(prisma.subscriptionCheckout.update).not.toHaveBeenCalled();
     });
 
