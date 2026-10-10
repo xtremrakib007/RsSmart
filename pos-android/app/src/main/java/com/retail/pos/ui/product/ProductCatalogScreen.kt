@@ -21,6 +21,9 @@ import com.retail.shared.data.local.entity.Product
 fun ProductCatalogScreen(
     onNavigateToCart: () -> Unit,
     onCheckout: () -> Unit,
+    onScanBarcode: () -> Unit,
+    onPriceCheck: () -> Unit,
+    onReturns: () -> Unit,
     viewModel: CartViewModel = hiltViewModel()
 ) {
     val products by viewModel.products.collectAsState()
@@ -36,6 +39,15 @@ fun ProductCatalogScreen(
             TopAppBar(
                 title = { Text("Product Catalog") },
                 actions = {
+                    IconButton(onClick = onScanBarcode) {
+                        Icon(Icons.Default.QrCodeScanner, contentDescription = "Scan barcode")
+                    }
+                    IconButton(onClick = onPriceCheck) {
+                        Icon(Icons.Default.PriceCheck, contentDescription = "Price check")
+                    }
+                    IconButton(onClick = onReturns) {
+                        Icon(Icons.Default.ReceiptLong, contentDescription = "Returns and refunds")
+                    }
                     BadgedBox(
                         badge = {
                             if (itemCount > 0) {
