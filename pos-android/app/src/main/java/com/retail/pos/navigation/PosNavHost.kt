@@ -2,6 +2,9 @@ package com.retail.pos.navigation
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -25,19 +28,22 @@ object PosRoutes {
 
 @Composable
 fun PosNavHost(navController: NavHostController = rememberNavController()) {
-    NavHost(
-        navController = navController,
-        startDestination = PosRoutes.SESSION
-    ) {
+    NavHost(navController = navController, startDestination = PosRoutes.SESSION) {
         composable(PosRoutes.SESSION) {
             SessionScreen(onSessionOpen = { navController.navigate(PosRoutes.CATALOG) })
         }
         composable(PosRoutes.CATALOG) {
+            val catalogEntry = remember { navController.getBackStackEntry(PosRoutes.CATALOG) }
+            val scannedBarcode by catalogEntry.savedStateHandle
+                .getStateFlow("scanned_barcode", "")
+                .collectAsState()
             ProductCatalogScreen(
                 onNavigateToCart = { navController.navigate(PosRoutes.CART) },
                 onCheckout = { navController.navigate(PosRoutes.CHECKOUT) },
                 onScanBarcode = { navController.navigate(PosRoutes.SCANNER) },
-                onPriceCheck = { navController.navigate(PosRoutes.SCANNER) }
+                onPriceCheck = { navController.navigate(PosRoutes.SCANNER) },
+                scannedBarcode = scannedBarcode,
+                onScannedBarcodeHandled = { catalogEntry.savedStateHandle["scanned_barcode"] = "" }
             )
         }
         composable(PosRoutes.SCANNER) {
