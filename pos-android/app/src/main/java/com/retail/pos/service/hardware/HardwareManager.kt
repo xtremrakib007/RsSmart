@@ -43,7 +43,7 @@ class HardwareManager @Inject constructor(
 
     fun openCashDrawer() {
         // ESC/POS command to trigger cash drawer kick
-        val kickCommand = byteArrayOf(0x1B, 0x70, 0x00, 0x19, 0xFA)
+        val kickCommand = byteArrayOf(0x1B.toByte(), 0x70.toByte(), 0x00.toByte(), 0x19.toByte(), 0xFA.toByte())
         // This would be sent through the printer connection in practice
     }
 
