@@ -314,6 +314,31 @@ describe('SubscriptionCheckoutService', () => {
       expect(result).toEqual({ received: true, status: 'SUCCEEDED' });
     });
 
+    it('returns success if audit persistence fails after checkout finalization', async () => {
+      const x_signature = sign(fields);
+      prisma.subscriptionCheckout.findUnique.mockResolvedValue({
+        id: 'checkout-1',
+        tenantId,
+        subscriptionId,
+        provider: 'billplz',
+        providerReference: 'bill_abc',
+        status: 'PENDING',
+        amount: '99.00',
+        currency: 'MYR',
+        webhookProcessedAt: null,
+      });
+      payments.verifyPayment.mockResolvedValue({ status: 'SUCCEEDED', amount: { amount: 9900, currency: 'MYR' }, paidAt: new Date() });
+      audit.log.mockRejectedValue(new Error('audit database unavailable'));
+
+      await expect(service.handleBillplzWebhook({ ...fields, x_signature }))
+        .resolves.toEqual({ received: true, status: 'SUCCEEDED' });
+      expect(subscriptions.activate).toHaveBeenCalledTimes(1);
+      expect(prisma.subscriptionCheckout.update).toHaveBeenCalledWith({
+        where: { id: 'checkout-1' },
+        data: expect.objectContaining({ status: 'SUCCEEDED' }),
+      });
+    });
+
     it('does not activate when another webhook worker owns the lease', async () => {
       const x_signature = sign(fields);
       prisma.subscriptionCheckout.findUnique
