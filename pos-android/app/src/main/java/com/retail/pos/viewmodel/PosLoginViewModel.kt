@@ -43,7 +43,7 @@ class PosLoginViewModel @Inject constructor(
                 }
 
                 val session = withContext(Dispatchers.IO) {
-                    val connection = (URL("$base/auth/login").openConnection() as HttpURLConnection)
+                    val connection = (URL("$base/v1/auth/login").openConnection() as HttpURLConnection)
                     try {
                         connection.requestMethod = "POST"
                         connection.connectTimeout = 12_000
@@ -64,7 +64,8 @@ class PosLoginViewModel @Inject constructor(
                             if (status == 401) "Email, password or tenant ID is incorrect, or the account is inactive."
                             else "Login service returned an error (HTTP $status). Check the backend URL and try again."
                         )
-                        val response = JSONObject(responseText)
+                        val envelope = JSONObject(responseText)
+                        val response = envelope.optJSONObject("data") ?: envelope
                         val user = response.getJSONObject("user")
                         val accessToken = response.getString("accessToken")
                         val refreshToken = response.getString("refreshToken")
