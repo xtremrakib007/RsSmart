@@ -36,10 +36,17 @@ class SessionViewModel @Inject constructor(
                     return@launch
                 }
 
+                val tenantId = sessionProvider.tenantId.first()
+                val userId = sessionProvider.userId.first()
+                if (tenantId.isBlank() || userId.isBlank()) {
+                    _sessionAction.value = SessionAction.Error("Sign in with your company account before opening a cashier shift.")
+                    return@launch
+                }
+
                 val session = PosSession(
                     id = UUID.randomUUID().toString(),
-                    tenantId = sessionProvider.tenantId.first(),
-                    userId = sessionProvider.userId.first(),
+                    tenantId = tenantId,
+                    userId = userId,
                     deviceId = deviceId,
                     openingCash = openingCash,
                     openedAt = System.currentTimeMillis(),
