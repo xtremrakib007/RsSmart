@@ -202,17 +202,18 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
+          cache: gradle
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
       - name: Build debug APK
-        run: ./gradlew assembleDebug
-        timeout-minutes: 15
+        run: ./gradlew --no-daemon assembleDebug
+        timeout-minutes: 30
 
       - name: Run unit tests
-        run: ./gradlew test
-        timeout-minutes: 10
+        run: ./gradlew --no-daemon test
+        timeout-minutes: 15
 
   android-sales:
     name: Android — Sales
@@ -230,14 +231,15 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
+          cache: gradle
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
       - name: Build debug APK
-        run: ./gradlew assembleDebug
-        timeout-minutes: 15
+        run: ./gradlew --no-daemon assembleDebug
+        timeout-minutes: 30
 
       - name: Run unit tests
-        run: ./gradlew test
-        timeout-minutes: 10
+        run: ./gradlew --no-daemon test
+        timeout-minutes: 15
