@@ -3,6 +3,7 @@ package com.retail.shared.di
 import android.content.Context
 import androidx.room.Room
 import com.retail.shared.data.local.database.RetailDatabase
+import com.retail.shared.data.local.database.MIGRATION_1_2
 import com.retail.shared.sync.SyncApi
 import dagger.Module
 import dagger.Provides
@@ -27,7 +28,7 @@ object SharedModule {
             RetailDatabase::class.java,
             "retail_database"
         )
-            .fallbackToDestructiveMigration()
+            .addMigrations(MIGRATION_1_2)
             .build()
     }
 
