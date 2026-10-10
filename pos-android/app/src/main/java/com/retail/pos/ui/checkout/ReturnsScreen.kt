@@ -64,7 +64,7 @@ fun ReturnsScreen(
                 onValueChange = { refundAmount = it },
                 label = { Text("Refund Amount") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                leadingIcon = { Icon(Icons.Default.AttachMoney, contentDescription = null) },
+                leadingIcon = { Icon(Icons.Default.AccountBalanceWallet, contentDescription = null) },
                 modifier = Modifier.fillMaxWidth()
             )
 
