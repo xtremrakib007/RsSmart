@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, Logger, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { createHmac } from 'crypto';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { PaymentsService } from './payments.service';
@@ -348,5 +349,70 @@ export class SubscriptionCheckoutService {
       newValues: { providerReference, status: verified.status },
     });
     return { received: true, status: verified.status };
+  }
+
+  /**
+   * Rechecks a bounded batch of pending Billplz checkouts against the provider.
+   * This is an internal service entry point for a trusted scheduler/worker; it
+   * is deliberately not exposed as a public controller route. Successful rows
+   * are passed through the same signature-checked, provider-reverified,
+   * lease-protected finalization path as callbacks. A provider response alone
+   * never directly activates a subscription here.
+   */
+  async reconcilePendingBillplzCheckouts() {
+    const signatureKey = process.env.BILLPLZ_X_SIGNATURE_KEY;
+    if (!signatureKey) {
+      throw new BadRequestException('BILLPLZ_X_SIGNATURE_KEY is not configured');
+    }
+
+    const pending: CheckoutRecord[] = await this.prisma.subscriptionCheckout.findMany({
+      where: {
+        provider: 'billplz',
+        status: 'PENDING',
+        webhookProcessedAt: null,
+      },
+      orderBy: { createdAt: 'asc' },
+      take: 50,
+    });
+
+    let checked = 0;
+    let finalized = 0;
+    let stillPending = 0;
+    let failed = 0;
+
+    for (const checkout of pending) {
+      checked += 1;
+      try {
+        const verification = await this.payments.verifyPayment(checkout.providerReference);
+        if (verification.status !== 'SUCCEEDED') {
+          stillPending += 1;
+          continue;
+        }
+
+        // Only use providerReference from our own persisted checkout row.
+        // The signature is generated internally to reuse the single callback
+        // finalization path; that path independently calls verifyPayment again,
+        // checks exact amount/currency, and obtains the atomic processing lease.
+        const fields: Record<string, string | undefined> = {
+          id: checkout.providerReference,
+        };
+        const signed = Object.keys(fields)
+          .sort()
+          .map((key) => `${key}=${fields[key] ?? ''}`)
+          .join('|');
+        fields.x_signature = createHmac('sha256', signatureKey).update(signed).digest('hex');
+        const result = await this.handleBillplzWebhook(fields);
+        if (result.status === 'SUCCEEDED') finalized += 1;
+        else stillPending += 1;
+      } catch (error) {
+        failed += 1;
+        this.logger.error(
+          `Billplz reconciliation failed for checkout ${checkout.id}; it will remain eligible for a later pass`,
+          error instanceof Error ? error.stack : undefined,
+        );
+      }
+    }
+
+    return { checked, finalized, stillPending, failed };
   }
 }
