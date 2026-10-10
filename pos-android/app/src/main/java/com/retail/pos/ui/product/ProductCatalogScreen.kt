@@ -23,6 +23,7 @@ fun ProductCatalogScreen(
     onNavigateToCart: () -> Unit,
     onCheckout: () -> Unit,
     onScanBarcode: () -> Unit,
+    onCustomers: () -> Unit,
     scannedBarcode: String? = null,
     viewModel: CartViewModel = hiltViewModel()
 ) {
@@ -43,6 +44,9 @@ fun ProductCatalogScreen(
             TopAppBar(
                 title = { Text("RsSmart POS") },
                 actions = {
+                    IconButton(onClick = onCustomers) {
+                        Icon(Icons.Default.People, contentDescription = "Customers")
+                    }
                     IconButton(onClick = onScanBarcode) {
                         Icon(Icons.Default.QrCodeScanner, contentDescription = "Scan product barcode")
                     }
