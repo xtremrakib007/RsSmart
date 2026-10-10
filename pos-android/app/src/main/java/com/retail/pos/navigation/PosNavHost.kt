@@ -9,11 +9,13 @@ import com.retail.pos.ui.cart.CartScreen
 import com.retail.pos.ui.checkout.CheckoutScreen
 import com.retail.pos.ui.payment.PaymentScreen
 import com.retail.pos.ui.product.ProductCatalogScreen
+import com.retail.pos.ui.product.BarcodeScannerScreen
 import com.retail.pos.ui.session.SessionScreen
 
 object PosRoutes {
     const val SESSION = "session"
     const val CATALOG = "catalog"
+    const val SCANNER = "scanner"
     const val CART = "cart"
     const val CHECKOUT = "checkout"
     const val PAYMENT = "payment/{orderId}"
@@ -34,7 +36,18 @@ fun PosNavHost(navController: NavHostController = rememberNavController()) {
         composable(PosRoutes.CATALOG) {
             ProductCatalogScreen(
                 onNavigateToCart = { navController.navigate(PosRoutes.CART) },
-                onCheckout = { navController.navigate(PosRoutes.CHECKOUT) }
+                onCheckout = { navController.navigate(PosRoutes.CHECKOUT) },
+                onScanBarcode = { navController.navigate(PosRoutes.SCANNER) },
+                navController = navController
+            )
+        }
+        composable(PosRoutes.SCANNER) {
+            BarcodeScannerScreen(
+                onBarcodeScanned = { code ->
+                    navController.previousBackStackEntry?.savedStateHandle?.set("scannedBarcode", code)
+                    navController.popBackStack()
+                },
+                onClose = { navController.popBackStack() }
             )
         }
         composable(PosRoutes.CART) {
