@@ -12,15 +12,23 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.retail.pos.viewmodel.SessionViewModel
+import com.retail.pos.session.PosSessionProvider
+import kotlinx.coroutines.launch
 import java.util.Locale
 
 private val cashDenominations = listOf(100.00, 50.00, 20.00, 10.00, 5.00, 1.00, 0.50, 0.20, 0.10, 0.05)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SessionScreen(onSessionOpen: () -> Unit, viewModel: SessionViewModel = hiltViewModel()) {
+fun SessionScreen(
+    onSessionOpen: () -> Unit,
+    onLogout: () -> Unit,
+    viewModel: SessionViewModel = hiltViewModel(),
+    sessionProvider: PosSessionProvider = androidx.hilt.navigation.compose.hiltViewModel()
+) {
     val openSession by viewModel.openSession.collectAsState()
     val action by viewModel.sessionAction.collectAsState()
+    val scope = rememberCoroutineScope()
     var openingCounts by remember { mutableStateOf(cashDenominations.associateWith { "" }) }
     var closingCounts by remember { mutableStateOf(cashDenominations.associateWith { "" }) }
     var notes by remember { mutableStateOf("") }
@@ -42,7 +50,24 @@ fun SessionScreen(onSessionOpen: () -> Unit, viewModel: SessionViewModel = hiltV
         }
     }
 
-    Scaffold(topBar = { TopAppBar(title = { Text("POS Session") }) }) { padding ->
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("POS Session") },
+                actions = {
+                    TextButton(
+                        enabled = openSession == null,
+                        onClick = {
+                            scope.launch {
+                                sessionProvider.clearIdentity()
+                                onLogout()
+                            }
+                        }
+                    ) { Text("Sign out") }
+                }
+            )
+        }
+    ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding).padding(16.dp), contentAlignment = Alignment.Center) {
             if (openSession != null) {
                 Card(Modifier.fillMaxWidth()) {
