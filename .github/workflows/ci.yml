@@ -215,21 +215,12 @@ jobs:
         run: ./gradlew --no-daemon test
         timeout-minutes: 15
 
-      - name: Upload Sales debug APK
-        if: success()
-        uses: actions/upload-artifact@v7
-        with:
-          name: rssmart-sales-debug-apk
-          path: sales-android/app/build/outputs/apk/debug/*.apk
-          if-no-files-found: error
-          retention-days: 7
-
       - name: Upload POS debug APK
         if: success()
         uses: actions/upload-artifact@v7
         with:
           name: rssmart-pos-debug-apk
-          path: pos-android/app/build/outputs/apk/debug/*.apk
+          path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 7
 
@@ -261,3 +252,12 @@ jobs:
       - name: Run unit tests
         run: ./gradlew --no-daemon test
         timeout-minutes: 15
+
+      - name: Upload Sales debug APK
+        if: success()
+        uses: actions/upload-artifact@v7
+        with:
+          name: rssmart-sales-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 7
