@@ -1,4 +1,4 @@
-import { Inject, Injectable, NotImplementedException } from '@nestjs/common';
+import { Inject, Injectable, Logger, NotImplementedException } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
 import { PAYMENT_PROVIDER } from './payments.constants';
 import {
@@ -29,6 +29,8 @@ import {
  */
 @Injectable()
 export class PaymentsService {
+  private readonly logger = new Logger(PaymentsService.name);
+
   constructor(
     @Inject(PAYMENT_PROVIDER) private provider: PaymentProviderAdapter,
     private audit: AuditService,
@@ -49,7 +51,7 @@ export class PaymentsService {
   ): Promise<CheckoutResult> {
     const result = await this.provider.createCheckout({ ...params, tenantId });
 
-    await this.audit.log({
+    await this.logAuditSafely({
       tenantId,
       userId: actorUserId,
       action: 'CREATE',
@@ -90,7 +92,7 @@ export class PaymentsService {
 
     const result = await this.provider.refund({ providerReference, amount, reason });
 
-    await this.audit.log({
+    await this.logAuditSafely({
       tenantId,
       userId: actorUserId,
       action: 'UPDATE',
@@ -106,5 +108,23 @@ export class PaymentsService {
     });
 
     return result;
+  }
+
+  /**
+   * A provider-side payment/refund may already have happened when audit
+   * persistence fails. Do not turn that into a failed API response that
+   * encourages callers to retry and potentially create another payment.
+   * The failure is logged for operational alerting; audit storage should
+   * still be monitored and repaired independently.
+   */
+  private async logAuditSafely(data: Parameters<AuditService['log']>[0]): Promise<void> {
+    try {
+      await this.audit.log(data);
+    } catch (error) {
+      this.logger.error(
+        `Payment audit persistence failed for action ${data.action} on ${data.entityType}; provider operation remains successful`,
+        error instanceof Error ? error.stack : undefined,
+      );
+    }
   }
 }
