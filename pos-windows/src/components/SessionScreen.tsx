@@ -54,7 +54,7 @@ function DenominationCounter({
               value={counts[String(d.cents)] ?? '0'}
               onChange={e => {
                 const value = e.target.value;
-                if (value !== '' && (!/^\\d+$/.test(value) || Number(value) < 0)) return;
+                if (value !== '' && (!(/^[0-9]+$/.test(value)) || Number(value) < 0)) return;
                 onChange({ ...counts, [String(d.cents)]: value });
               }}
               className="input w-24 text-right"
