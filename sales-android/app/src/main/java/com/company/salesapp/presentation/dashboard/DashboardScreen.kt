@@ -103,6 +103,7 @@ fun KpiCard(title: String, value: String, color: androidx.compose.ui.graphics.Co
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MenuCard(item: MenuItem, onClick: () -> Unit) {
     Card(onClick = onClick, modifier = Modifier.fillMaxWidth().aspectRatio(1.5f)) {
