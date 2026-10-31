@@ -203,6 +203,13 @@ jobs:
         run: ./gradlew assembleDebug
         timeout-minutes: 15
 
+      - name: Upload POS debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: pos-android-debug-apk
+          path: pos-android/app/build/outputs/apk/debug/*.apk
+          retention-days: 14
+
       - name: Run unit tests
         run: ./gradlew test
         timeout-minutes: 10
@@ -235,6 +242,13 @@ jobs:
       - name: Build debug APK
         run: ./gradlew assembleDebug
         timeout-minutes: 15
+
+      - name: Upload Sales debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: sales-android-debug-apk
+          path: sales-android/app/build/outputs/apk/debug/*.apk
+          retention-days: 14
 
       - name: Run unit tests
         run: ./gradlew test
