@@ -87,6 +87,10 @@ jobs:
       - name: Prisma migrate deploy
         run: npx prisma migrate deploy
 
+      # The migrations must build exactly what schema.prisma describes.
+      - name: Migrations match schema.prisma
+        run: npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --exit-code
+
       - name: Lint
         run: npm run lint
 
