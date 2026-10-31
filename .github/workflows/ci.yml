@@ -227,6 +227,11 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      # google-services.json is not committed (it is project-specific); CI
+      # builds with the placeholder so the Google Services plugin can run.
+      - name: Use the example Firebase config when none is present
+        run: test -f app/google-services.json || cp app/google-services.json.example app/google-services.json
+
       - name: Build debug APK
         run: ./gradlew assembleDebug
         timeout-minutes: 15
