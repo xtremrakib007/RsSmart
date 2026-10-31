@@ -2,6 +2,7 @@ package com.company.salesapp.presentation.field
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.company.salesapp.data.repository.AppConfigRepository
 import com.company.salesapp.data.repository.SalesRepository
 import com.company.salesapp.gps.LocationTracker
 import com.company.salesapp.util.fileToJpegDataUrl
@@ -32,7 +33,8 @@ data class AttendanceUiState(
 @HiltViewModel
 class AttendanceViewModel @Inject constructor(
     private val sales: SalesRepository,
-    private val locationTracker: LocationTracker
+    private val locationTracker: LocationTracker,
+    private val appConfig: AppConfigRepository
 ) : ViewModel() {
     private val _state = MutableStateFlow(AttendanceUiState())
     val state: StateFlow<AttendanceUiState> = _state.asStateFlow()
@@ -61,6 +63,16 @@ class AttendanceViewModel @Inject constructor(
             val loc = withTimeoutOrNull(10_000) { runCatching { locationTracker.getCurrentLocation().first() }.getOrNull() }
                 ?: locationTracker.getLastLocation()
             val dataUrl = photo?.let { f -> withContext(Dispatchers.Default) { runCatching { fileToJpegDataUrl(f) }.getOrNull() } }
+            // Rules the admin sets on the server (the server checks them too).
+            val rules = appConfig.config.value
+            if (rules.selfieRequired && dataUrl == null) {
+                _state.update { it.copy(busy = false, error = "A selfie is required. Allow the camera and take a photo.") }
+                return@launch
+            }
+            if (rules.gpsRequired && loc == null) {
+                _state.update { it.copy(busy = false, error = "Your location is required. Turn on GPS and try again.") }
+                return@launch
+            }
             val result = if (checkingIn) sales.checkIn(loc?.latitude, loc?.longitude, dataUrl)
                          else sales.checkOut(loc?.latitude, loc?.longitude, dataUrl)
             result

@@ -16,6 +16,7 @@ describe('SalesService (Phase 37 field sales)', () => {
       customer: { findMany: jest.fn(), updateMany: jest.fn().mockResolvedValue({ count: 2 }), groupBy: jest.fn() },
       customerVisit: { findMany: jest.fn() },
       user: { findFirst: jest.fn(), findMany: jest.fn() },
+      tenant: { findUnique: jest.fn().mockResolvedValue({ settings: {} }), update: jest.fn().mockResolvedValue({}) },
     };
     upload = { uploadFile: jest.fn().mockResolvedValue('tenants/t1/attendance/x.jpg'), getFileUrl: jest.fn().mockResolvedValue('https://files/x.jpg') };
     const mod = await Test.createTestingModule({
@@ -104,5 +105,39 @@ describe('SalesService (Phase 37 field sales)', () => {
     expect(r.summary).toEqual({ total: 2, in: 1, out: 0, notIn: 1 });
     expect(r.team.find((x) => x.userId === 'r1')).toEqual(expect.objectContaining({ status: 'IN', checkInPhotoUrl: 'https://files/x.jpg' }));
     expect(r.team.find((x) => x.userId === 'r2')!.status).toBe('NOT_IN');
+  });
+
+  it('attendance rules from the settings are enforced on the server', async () => {
+    prisma.attendanceRecord.findUnique.mockResolvedValue(null);
+    prisma.tenant.findUnique.mockResolvedValue({ settings: { salesApp: { attendance: { selfieRequired: true, gpsRequired: true } } } });
+    await expect(service.checkIn('t1', 'u1', { latitude: 1, longitude: 2 })).rejects.toThrow(/selfie is required/);
+    await expect(service.checkIn('t1', 'u1', { photo: selfie })).rejects.toThrow(/location is required/);
+    await expect(service.checkIn('t1', 'u1', { photo: selfie, latitude: 4.6, longitude: 101.1 })).resolves.toBeDefined();
+  });
+
+  it('app config: team only for managers, update prompt, admin flag', async () => {
+    prisma.tenant.findUnique.mockResolvedValue({ settings: { salesApp: { features: { expenses: false }, update: { latestVersionCode: 3, minVersionCode: 1, apkUrl: 'https://x/a.apk' } } } });
+    const rep = await service.appConfigFor('t1', ['sales_rep'], 2);
+    expect(rep.features.team).toBe(false);
+    expect(rep.menuOrder).not.toContain('team');
+    expect(rep.menuOrder).not.toContain('expenses');
+    expect(rep.updateStatus).toBe('AVAILABLE');
+    expect(rep.canEditSettings).toBe(false);
+    const admin = await service.appConfigFor('t1', ['admin'], 3);
+    expect(admin.features.team).toBe(true);
+    expect(admin.updateStatus).toBe('NONE');
+    expect(admin.canEditSettings).toBe(true);
+  });
+
+  it('only an admin changes the settings; a change keeps other tenant settings', async () => {
+    await expect(service.updateAppConfig('t1', ['manager'], { currency: 'USD' })).rejects.toBeInstanceOf(ForbiddenException);
+    prisma.tenant.findUnique.mockResolvedValue({ settings: { branding: { color: 'red' }, salesApp: { features: { visits: false } } } });
+    await expect(service.updateAppConfig('t1', ['admin'], { features: { bogus: true } })).rejects.toBeInstanceOf(BadRequestException);
+    const r = await service.updateAppConfig('t1', ['admin'], { notice: { text: 'Stock count Friday', level: 'warning' } });
+    expect(r.notice).toEqual({ text: 'Stock count Friday', level: 'warning' });
+    expect(r.features.visits).toBe(false);
+    expect(prisma.tenant.update).toHaveBeenCalledWith({ where: { id: 't1' }, data: { settings: {
+      branding: { color: 'red' }, salesApp: { features: { visits: false }, notice: { text: 'Stock count Friday', level: 'warning' } },
+    } } });
   });
 });

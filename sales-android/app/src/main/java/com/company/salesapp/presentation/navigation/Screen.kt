@@ -29,4 +29,5 @@ sealed class Screen(val route: String) {
     object Today : Screen("today")
     object Nearby : Screen("nearby")
     object TeamAttendance : Screen("team_attendance")
+    object AppSettings : Screen("app_settings")
 }

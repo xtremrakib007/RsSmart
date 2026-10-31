@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../common/decorators/user.decorator';
@@ -10,6 +10,10 @@ import { SalesService } from './sales.service';
 @Controller('sales')
 export class SalesController {
   constructor(private readonly sales: SalesService) {}
+  // Settings the app loads at start; an admin changes them with no app rebuild.
+  @Get('app-config') appConfig(@CurrentUser() u: any, @Query('versionCode') v?: string) { return this.sales.appConfigFor(u.tenantId, u.roles, v ? Number(v) : undefined); }
+  @Patch('app-config') updateAppConfig(@Body() b: any, @CurrentUser() u: any) { return this.sales.updateAppConfig(u.tenantId, u.roles, b); }
+  @Delete('app-config') resetAppConfig(@CurrentUser() u: any) { return this.sales.resetAppConfig(u.tenantId, u.roles); }
   @Get('dashboard') dashboard(@CurrentUser() u: any) { return this.sales.dashboard(u.tenantId, u.userId); }
   @Get('targets') targets(@CurrentUser() u: any) { return this.sales.listTargets(u.tenantId, u.userId); }
   @Post('targets') createTarget(@Body() b: any, @CurrentUser() u: any) { return this.sales.createTarget(u.tenantId, b); }
@@ -18,7 +22,7 @@ export class SalesController {
   @Get('today') today(@CurrentUser() u: any) { return this.sales.today(u.tenantId, u.userId); }
   @Get('customers') customers(@CurrentUser() u: any, @Query('route') route?: string) { return this.sales.myCustomers(u.tenantId, u.userId, u.roles, route); }
   @Get('customers/nearby') nearby(@CurrentUser() u: any, @Query('lat') lat: string, @Query('lng') lng: string, @Query('limit') limit?: string) {
-    return this.sales.nearby(u.tenantId, u.userId, u.roles, Number(lat), Number(lng), limit ? Number(limit) : 50);
+    return this.sales.nearby(u.tenantId, u.userId, u.roles, Number(lat), Number(lng), limit ? Number(limit) : undefined);
   }
   @Get('route-names') routeNames(@CurrentUser() u: any) { return this.sales.routeNames(u.tenantId, u.userId, u.roles); }
   @Post('customers/assign') assign(@Body() b: any, @CurrentUser() u: any) { return this.sales.assignCustomers(u.tenantId, u.roles, b); }

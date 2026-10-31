@@ -4,6 +4,9 @@ import { UploadService } from '../upload/upload.service';
 import {
   attendanceStatus, customerScope, decodeSelfie, isManager, minutesWorked, sortByDistance, workDateOf,
 } from './field-sales.util';
+import {
+  DEFAULT_SALES_APP_CONFIG, SalesAppConfig, applySalesAppConfigPatch, mergeSalesAppConfig, sanitizeSalesAppConfigPatch, updateStatus,
+} from './app-config.util';
 
 const CUSTOMER_FIELDS = {
   id: true, code: true, name: true, phone: true, address: true, city: true, latitude: true, longitude: true,
@@ -66,7 +69,64 @@ export class SalesService {
     return this.upload.uploadFile(file as any, `tenants/${tenantId}/attendance`);
   }
 
+  // ── App settings (changed on the server, no app rebuild) ──
+
+  /** This tenant's sales app settings, defaults filled in. */
+  async appConfig(tenantId: string): Promise<SalesAppConfig> {
+    const t = await this.prisma.tenant.findUnique({ where: { id: tenantId }, select: { settings: true } });
+    const settings = (t?.settings as Record<string, any>) || {};
+    return mergeSalesAppConfig(settings.salesApp);
+  }
+
+  /** What the app loads at start: settings for this user, plus whether to update. */
+  async appConfigFor(tenantId: string, roles: string[], versionCode?: number) {
+    const cfg = await this.appConfig(tenantId);
+    // The team screen is for managers whatever the setting says.
+    const features = { ...cfg.features, team: cfg.features.team && isManager(roles) };
+    return {
+      ...cfg,
+      features,
+      menuOrder: cfg.menuOrder.filter((f) => features[f]),
+      updateStatus: updateStatus(cfg, versionCode),
+      canEditSettings: (roles || []).includes('admin'),
+    };
+  }
+
+  /** Admin changes some settings; the rest stay as they are. */
+  async updateAppConfig(tenantId: string, roles: string[], patch: unknown) {
+    if (!(roles || []).includes('admin')) throw new ForbiddenException('Only an admin can change the sales app settings.');
+    let clean;
+    try { clean = sanitizeSalesAppConfigPatch(patch); } catch (e: any) { throw new BadRequestException(e.message); }
+    const t = await this.prisma.tenant.findUnique({ where: { id: tenantId }, select: { settings: true } });
+    if (!t) throw new NotFoundException('Tenant not found');
+    const settings = (t.settings as Record<string, any>) || {};
+    const salesApp = applySalesAppConfigPatch(settings.salesApp, clean);
+    await this.prisma.tenant.update({ where: { id: tenantId }, data: { settings: { ...settings, salesApp } } });
+    return mergeSalesAppConfig(salesApp);
+  }
+
+  /** Back to the defaults for everything. */
+  async resetAppConfig(tenantId: string, roles: string[]) {
+    if (!(roles || []).includes('admin')) throw new ForbiddenException('Only an admin can change the sales app settings.');
+    const t = await this.prisma.tenant.findUnique({ where: { id: tenantId }, select: { settings: true } });
+    if (!t) throw new NotFoundException('Tenant not found');
+    const { salesApp: _old, ...rest } = (t.settings as Record<string, any>) || {};
+    await this.prisma.tenant.update({ where: { id: tenantId }, data: { settings: rest } });
+    return DEFAULT_SALES_APP_CONFIG;
+  }
+
+  /** Attendance rules from the settings, checked on the server so older apps follow them too. */
+  private async checkAttendanceRules(tenantId: string, data: any) {
+    const { attendance } = await this.appConfig(tenantId);
+    if (attendance.selfieRequired && !data?.photo) throw new BadRequestException('A selfie is required to check in or out.');
+    const coord = (v: unknown) => v !== null && v !== undefined && v !== '' && Number.isFinite(Number(v));
+    if (attendance.gpsRequired && !(coord(data?.latitude) && coord(data?.longitude))) {
+      throw new BadRequestException('Your location is required to check in or out. Turn on GPS and try again.');
+    }
+  }
+
   async checkIn(tenantId: string, userId: string, data: any) {
+    await this.checkAttendanceRules(tenantId, data);
     const workDate = workDateOf();
     const existing = await this.prisma.attendanceRecord.findUnique({ where: { tenantId_userId_workDate: { tenantId, userId, workDate } } });
     // One check-in per day: a second one would overwrite the real start time.
@@ -85,6 +145,7 @@ export class SalesService {
     const existing = await this.prisma.attendanceRecord.findUnique({ where: { tenantId_userId_workDate: { tenantId, userId, workDate } } });
     if (!existing || !existing.checkInAt) throw new NotFoundException('Attendance record not found. Check in first.');
     if (existing.checkOutAt) throw new ConflictException('Already checked out today.');
+    await this.checkAttendanceRules(tenantId, data);
     const photo = await this.saveSelfie(tenantId, userId, data.photo, 'out');
     return this.prisma.attendanceRecord.update({ where: { id: existing.id }, data: { checkOutAt: new Date(), checkOutLat: data.latitude, checkOutLng: data.longitude, checkOutPhoto: photo } });
   }
@@ -101,10 +162,12 @@ export class SalesService {
   }
 
   /** The user's customers nearest first from where they stand. */
-  async nearby(tenantId: string, userId: string, roles: string[], lat: number, lng: number, limit = 50) {
+  async nearby(tenantId: string, userId: string, roles: string[], lat: number, lng: number, limit?: number) {
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) throw new BadRequestException('lat and lng are required');
     const customers = await this.myCustomers(tenantId, userId, roles);
-    return sortByDistance(customers, lat, lng, limit);
+    // How many to list comes from the app settings unless the app asks for a number.
+    const max = limit && Number.isFinite(limit) ? limit : (await this.appConfig(tenantId)).nearbyLimit;
+    return sortByDistance(customers, lat, lng, max);
   }
 
   /** Route names in use, with how many customers each has. */

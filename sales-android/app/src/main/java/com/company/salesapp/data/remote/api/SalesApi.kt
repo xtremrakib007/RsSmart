@@ -5,6 +5,12 @@ import retrofit2.Response
 import retrofit2.http.*
 
 interface SalesApi {
+    @GET("sales/app-config")
+    suspend fun appConfig(@Query("versionCode") versionCode: Int): Response<ApiResponse<AppConfigDto>>
+
+    @PATCH("sales/app-config")
+    suspend fun updateAppConfig(@Body patch: Map<String, @JvmSuppressWildcards Any?>): Response<ApiResponse<AppConfigDto>>
+
     @GET("sales/dashboard")
     suspend fun dashboard(): Response<ApiResponse<SalesDashboardDto>>
 
@@ -27,7 +33,7 @@ interface SalesApi {
     suspend fun today(): Response<ApiResponse<TodayDto>>
 
     @GET("sales/customers/nearby")
-    suspend fun nearby(@Query("lat") lat: Double, @Query("lng") lng: Double, @Query("limit") limit: Int = 60): Response<ApiResponse<List<FieldCustomerDto>>>
+    suspend fun nearby(@Query("lat") lat: Double, @Query("lng") lng: Double, @Query("limit") limit: Int? = null): Response<ApiResponse<List<FieldCustomerDto>>>
 
     @GET("sales/team/attendance")
     suspend fun teamAttendance(@Query("date") date: String? = null): Response<ApiResponse<TeamAttendanceDto>>
