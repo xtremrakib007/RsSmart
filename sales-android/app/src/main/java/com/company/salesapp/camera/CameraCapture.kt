@@ -23,7 +23,12 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 
 @Composable
-fun CameraCapture(onImageCaptured: (Uri) -> Unit, onError: (Exception) -> Unit) {
+fun CameraCapture(
+    onImageCaptured: (Uri) -> Unit,
+    onError: (Exception) -> Unit,
+    // Selfies (attendance) use the front camera.
+    useFrontCamera: Boolean = false
+) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var imageCapture: ImageCapture? by remember { mutableStateOf(null) }
@@ -39,7 +44,7 @@ fun CameraCapture(onImageCaptured: (Uri) -> Unit, onError: (Exception) -> Unit) 
                     val cameraProvider = cameraProviderFuture.get()
                     preview = Preview.Builder().build().also { it.setSurfaceProvider(previewView.surfaceProvider) }
                     imageCapture = ImageCapture.Builder().setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY).build()
-                    val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+                    val cameraSelector = if (useFrontCamera) CameraSelector.DEFAULT_FRONT_CAMERA else CameraSelector.DEFAULT_BACK_CAMERA
                     try {
                         cameraProvider.unbindAll()
                         cameraProvider.bindToLifecycle(lifecycleOwner, cameraSelector, preview, imageCapture)

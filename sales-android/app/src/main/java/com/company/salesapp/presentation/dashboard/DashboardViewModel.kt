@@ -34,6 +34,10 @@ class DashboardViewModel @Inject constructor(
     val isOnline: StateFlow<Boolean> = networkObserver.isOnline
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), true)
 
+    /** Admins and managers also get the team screens. */
+    val isManager: StateFlow<Boolean> = authRepository.isManager
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), false)
+
     init {
         refreshServerDashboard()
         viewModelScope.launch {

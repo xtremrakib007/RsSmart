@@ -103,6 +103,7 @@ model User {
   salesTargets SalesTarget[] @relation("SalesTargetUser")
   routePlans RoutePlan[] @relation("RoutePlanUser")
   attendanceRecords AttendanceRecord[] @relation("AttendanceUser")
+  assignedCustomers Customer[] @relation("CustomerAssignedRep")
   whatsappAutomationRules WhatsAppAutomationRule[] @relation("WhatsAppAutomationCreatedBy")
   invitationsSent Invitation[] @relation("InvitationInvitedBy")
   // Note: WhatsAppMessage.createdBy is intentionally a plain nullable String,
@@ -407,15 +408,21 @@ model Customer {
   creditLimit Decimal? @map("credit_limit") @db.Decimal(12, 2)
   balance     Decimal  @default(0) @db.Decimal(12, 2)
   category    String?  // VIP, Regular, etc.
+  // Field sales: the salesman who looks after this customer, and the route
+  // (area) it is visited on. A rep sees their own customers and unassigned ones.
+  assignedRepId String? @map("assigned_rep_id")
+  routeName     String? @map("route_name")
   isActive    Boolean  @default(true) @map("is_active")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  assignedRep User?    @relation("CustomerAssignedRep", fields: [assignedRepId], references: [id], onDelete: SetNull)
   orders      Order[]
   visits      CustomerVisit[]
   whatsAppContacts WhatsAppContact[]
 
+  @@index([tenantId, assignedRepId])
   @@map("customers")
 }
 // Note: a `whatsappCarts WhatsAppCart[]` field used to live here, but
@@ -619,6 +626,9 @@ model AttendanceRecord {
   checkInLng  Decimal? @map("check_in_lng") @db.Decimal(11, 8)
   checkOutLat Decimal? @map("check_out_lat") @db.Decimal(10, 8)
   checkOutLng Decimal? @map("check_out_lng") @db.Decimal(11, 8)
+  // Selfies taken at check-in / check-out (storage object names).
+  checkInPhoto  String? @map("check_in_photo")
+  checkOutPhoto String? @map("check_out_photo")
   notes       String?
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")

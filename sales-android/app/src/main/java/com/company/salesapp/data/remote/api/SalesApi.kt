@@ -22,4 +22,13 @@ interface SalesApi {
 
     @GET("sales/attendance")
     suspend fun attendance(): Response<ApiResponse<List<AttendanceDto>>>
+
+    @GET("sales/today")
+    suspend fun today(): Response<ApiResponse<TodayDto>>
+
+    @GET("sales/customers/nearby")
+    suspend fun nearby(@Query("lat") lat: Double, @Query("lng") lng: Double, @Query("limit") limit: Int = 60): Response<ApiResponse<List<FieldCustomerDto>>>
+
+    @GET("sales/team/attendance")
+    suspend fun teamAttendance(@Query("date") date: String? = null): Response<ApiResponse<TeamAttendanceDto>>
 }

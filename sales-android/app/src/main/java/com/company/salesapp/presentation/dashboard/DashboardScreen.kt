@@ -27,7 +27,12 @@ fun DashboardScreen(navController: NavController, viewModel: DashboardViewModel 
     val pendingSync by viewModel.pendingSyncCount.collectAsState()
     val isOnline by viewModel.isOnline.collectAsState()
 
-    val menuItems = listOf(
+    val isManager by viewModel.isManager.collectAsState()
+    val menuItems = listOfNotNull(
+        MenuItem("Attendance", Icons.Default.Fingerprint, Screen.Attendance.route, SuccessGreen),
+        MenuItem("Today's Route", Icons.Default.Map, Screen.Today.route, InfoBlue),
+        MenuItem("Nearby", Icons.Default.NearMe, Screen.Nearby.route, WarningOrange),
+        if (isManager) MenuItem("Team", Icons.Default.Groups, Screen.TeamAttendance.route, InfoBlue) else null,
         MenuItem("Customers", Icons.Default.People, Screen.Customers.route, InfoBlue),
         MenuItem("Orders", Icons.Default.ShoppingCart, Screen.Orders.route, SuccessGreen),
         MenuItem("Visits", Icons.Default.LocationOn, Screen.Visits.route, WarningOrange),

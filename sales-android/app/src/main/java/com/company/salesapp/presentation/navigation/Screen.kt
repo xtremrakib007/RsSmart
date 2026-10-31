@@ -25,4 +25,8 @@ sealed class Screen(val route: String) {
     object Collections : Screen("collections")
     object Expenses : Screen("expenses")
     object SyncStatus : Screen("sync_status")
+    object Attendance : Screen("attendance")
+    object Today : Screen("today")
+    object Nearby : Screen("nearby")
+    object TeamAttendance : Screen("team_attendance")
 }
