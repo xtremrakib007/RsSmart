@@ -159,7 +159,7 @@ export class InventoryService {
       throw new BadRequestException('Insufficient stock at source');
     }
 
-    let toInv = await this.prisma.inventory.findFirst({
+    const toInv = await this.prisma.inventory.findFirst({
       where: { tenantId, outletId, productId: data.productId, warehouseId: data.toWarehouseId || null },
     });
 

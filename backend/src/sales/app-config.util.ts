@@ -121,7 +121,7 @@ export function sanitizeSalesAppConfigPatch(patch: unknown): Partial<SalesAppCon
 /** Stored settings over the defaults; anything stored that is no longer valid is ignored. */
 export function mergeSalesAppConfig(stored: unknown): SalesAppConfig {
   const d = DEFAULT_SALES_APP_CONFIG;
-  let p: Partial<SalesAppConfig> = {};
+  const p: Partial<SalesAppConfig> = {};
   if (isObj(stored)) {
     // Sanitize section by section, so one bad saved value does not drop the rest.
     for (const key of Object.keys(stored)) {
