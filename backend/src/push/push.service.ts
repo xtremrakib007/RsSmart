@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import admin from 'firebase-admin';
+import * as admin from 'firebase-admin';
 import { PrismaService } from '../common/prisma/prisma.service';
 
 interface PushPayload {

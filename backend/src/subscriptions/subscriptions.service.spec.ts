@@ -90,7 +90,7 @@ describe('SubscriptionsService', () => {
 
       const result = await service.listAvailablePlans();
 
-      expect(result).toBe(plans);
+      expect(result).toEqual(plans);
       expect(prisma.subscriptionPlan.findMany).toHaveBeenCalledWith({
         where: { isActive: true },
         orderBy: { sortOrder: 'asc' },

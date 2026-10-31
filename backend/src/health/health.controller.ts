@@ -3,7 +3,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { Public } from '../common/decorators/public.decorator';
-import Redis from 'ioredis';
+import { Redis } from 'ioredis';
 
 @Public()
 @Controller({ path: 'health', version: VERSION_NEUTRAL })

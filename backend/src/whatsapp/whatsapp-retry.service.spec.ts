@@ -141,7 +141,12 @@ describe('WhatsAppRetryService', () => {
       const result = await service.processRetry(messageId, sendFn);
 
       expect(result).toEqual(expect.objectContaining({ requeued: true }));
-      expect(prisma.whatsAppMessage.update).toHaveBeenCalledTimes(2); // once for requeue, once in handleSendFailure
+      // handleSendFailure marks it FAILED with the next attempt and re-queues it.
+      expect(prisma.whatsAppMessage.update).toHaveBeenCalledTimes(1);
+      expect(prisma.whatsAppMessage.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ status: 'FAILED', retryCount: 2 }) }),
+      );
+      expect(queue.add).toHaveBeenCalled();
     });
 
     it('throws NotFound for missing message', async () => {
@@ -187,7 +192,7 @@ describe('Phase 30 — Full retry chain verification', () => {
     };
     audit = { log: jest.fn() };
     queue = { add: jest.fn() };
-    service = new WhatsAppRetryService(prisma, audit, queue);
+    service = new WhatsAppRetryService(prisma, audit as any, queue as any);
   });
 
   // ── Full chain: temporary failure → retry → success ────

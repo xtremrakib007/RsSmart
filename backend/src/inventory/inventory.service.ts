@@ -70,12 +70,17 @@ export class InventoryService {
     }
 
     // Phase 26: optimistic locking — only succeed if version hasn't changed since read.
-    const [updatedInventory, movement] = await this.prisma.$transaction([
-      this.prisma.inventory.updateMany({
+    // The movement is written only when the update won, in the same
+    // transaction, so a conflicting call leaves no movement behind.
+    const movement = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.inventory.updateMany({
         where: { id: inventory.id, version: inventory.version },
         data: { quantity: newQuantity, version: { increment: 1 } },
-      }),
-      this.prisma.stockMovement.create({
+      });
+      if (updated.count === 0) {
+        throw new ConflictException('Inventory was modified by another operation. Please retry.');
+      }
+      return tx.stockMovement.create({
         data: {
           tenantId,
           outletId,
@@ -86,12 +91,8 @@ export class InventoryService {
           notes: data.notes,
           createdBy: userId,
         },
-      }),
-    ]);
-
-    if (updatedInventory.count === 0) {
-      throw new ConflictException('Inventory was modified by another operation. Please retry.');
-    }
+      });
+    });
 
     return { inventory: { ...inventory, quantity: newQuantity, version: inventory.version + 1 }, movement };
   }

@@ -14,7 +14,7 @@ describe('InventoryService — outlet isolation', () => {
     prisma = {
       inventory: { findFirst: jest.fn(), findMany: jest.fn(), updateMany: jest.fn(), create: jest.fn() },
       stockMovement: { create: jest.fn(), findMany: jest.fn() },
-      $transaction: jest.fn((ops: any[]) => Promise.all(ops)),
+      $transaction: jest.fn((arg: any) => (typeof arg === "function" ? arg(prisma) : Promise.all(arg))),
     };
     service = new InventoryService(prisma);
   });
@@ -142,7 +142,7 @@ describe('InventoryService — concurrency & boundary cases (Phase 26)', () => {
     prisma = {
       inventory: { findFirst: jest.fn(), findMany: jest.fn(), updateMany: jest.fn(), create: jest.fn() },
       stockMovement: { create: jest.fn(), findMany: jest.fn() },
-      $transaction: jest.fn((ops: any[]) => Promise.all(ops)),
+      $transaction: jest.fn((arg: any) => (typeof arg === "function" ? arg(prisma) : Promise.all(arg))),
     };
     service = new InventoryService(prisma);
   });
@@ -178,7 +178,7 @@ describe('InventoryService — concurrency & boundary cases (Phase 26)', () => {
     expect(outcomes).toContain('fulfilled');
     expect(outcomes).toContain('rejected');
 
-    const rejected = r1.status === 'rejected' ? r1 : r2;
+    const rejected = (r1.status === 'rejected' ? r1 : r2) as PromiseRejectedResult;
     expect(rejected.reason).toBeInstanceOf(ConflictException);
   });
 

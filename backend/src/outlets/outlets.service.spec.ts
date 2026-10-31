@@ -15,7 +15,7 @@ describe('OutletsService', () => {
       userOutlet: { findMany: jest.fn(), findUnique: jest.fn(), upsert: jest.fn(), updateMany: jest.fn(), count: jest.fn(), delete: jest.fn() },
     };
     audit = { log: jest.fn() };
-    service = new OutletsService(prisma, audit as any);
+    service = new OutletsService(prisma, audit as any, { checkOutletLimit: jest.fn().mockResolvedValue({ allowed: true, current: 0, limit: 10 }) } as any);
   });
 
   describe('get / tenant isolation', () => {

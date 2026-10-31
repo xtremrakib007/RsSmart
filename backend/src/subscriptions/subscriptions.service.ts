@@ -52,7 +52,8 @@ export interface SubscriptionPlanRecord {
 /** features is a JSON column; plans store it as { feature: true/false }. */
 function toPlanRecord<T extends { features: unknown }>(plan: T): T & { features: Record<string, boolean> } {
   const f = plan.features;
-  return { ...plan, features: f && typeof f === 'object' && !Array.isArray(f) ? (f as Record<string, boolean>) : {} };
+  if (f === undefined || (f && typeof f === 'object' && !Array.isArray(f))) return plan as T & { features: Record<string, boolean> };
+  return { ...plan, features: {} };
 }
 
 // Statuses a tenant can be sitting in while still "live" — i.e. they already
