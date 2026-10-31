@@ -2,7 +2,8 @@
 // Central Database Schema for Multi-Tenant Business System
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["omitApi"]
 }
 
 datasource db {

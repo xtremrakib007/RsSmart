@@ -1,3 +1,5 @@
+import { WhatsAppAccountStatus } from '@prisma/client';
+
 export interface WhatsAppProviderAccount {
   id: string;
   phoneNumber?: string | null;
@@ -19,7 +21,7 @@ export interface WhatsAppMediaMessage {
 }
 
 export interface WhatsAppProvider {
-  connect(account: WhatsAppProviderAccount): Promise<{ status: string; qr?: string }>;
+  connect(account: WhatsAppProviderAccount): Promise<{ status: WhatsAppAccountStatus; qr?: string }>;
   disconnect(account: { id: string }): Promise<void>;
   sendText(account: WhatsAppProviderAccount, to: string, body: string): Promise<{ providerMessageId: string }>;
   sendTemplate(account: WhatsAppProviderAccount, to: string, template: WhatsAppTemplateParams): Promise<{ providerMessageId: string }>;

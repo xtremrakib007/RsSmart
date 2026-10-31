@@ -123,7 +123,7 @@ export class OrdersService {
           source: order.source,
           createdAt: order.createdAt,
           customer: order.customer,
-          items: order.items,
+          items: order.items.map((i) => ({ ...i, quantity: Number(i.quantity), total: Number(i.total) })),
         })
         .catch(() => {
           // NotificationsService already logs; this catch just guarantees

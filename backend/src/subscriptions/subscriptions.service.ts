@@ -12,7 +12,7 @@ import { AuditService } from '../audit/audit.service';
 // are identical, this is purely about what's typeable in this sandbox.
 export type SubscriptionStatus = 'TRIALING' | 'ACTIVE' | 'PAST_DUE' | 'SUSPENDED' | 'CANCELLED' | 'EXPIRED';
 
-interface SubscriptionRecord {
+export interface SubscriptionRecord {
   id: string;
   tenantId: string;
   planId: string;
@@ -32,7 +32,7 @@ interface SubscriptionRecord {
 // guessing at the runtime Decimal shape without a generated client to check
 // against — callers that need to do math with it should convert explicitly
 // once real generated types are available.
-interface SubscriptionPlanRecord {
+export interface SubscriptionPlanRecord {
   id: string;
   name: string;
   slug: string;
@@ -47,6 +47,12 @@ interface SubscriptionPlanRecord {
   sortOrder: number;
   createdAt: Date;
   updatedAt: Date;
+}
+
+/** features is a JSON column; plans store it as { feature: true/false }. */
+function toPlanRecord<T extends { features: unknown }>(plan: T): T & { features: Record<string, boolean> } {
+  const f = plan.features;
+  return { ...plan, features: f && typeof f === 'object' && !Array.isArray(f) ? (f as Record<string, boolean>) : {} };
 }
 
 // Statuses a tenant can be sitting in while still "live" — i.e. they already
@@ -83,7 +89,7 @@ export class SubscriptionsService {
   private async getPlanById(planId: string): Promise<SubscriptionPlanRecord> {
     const plan = await this.prisma.subscriptionPlan.findUnique({ where: { id: planId } });
     if (!plan) throw new NotFoundException('Subscription plan not found');
-    return plan;
+    return toPlanRecord(plan);
   }
 
   /**
@@ -148,10 +154,11 @@ export class SubscriptionsService {
    * deliberate call to make then, not assumed here.
    */
   async listAvailablePlans(): Promise<SubscriptionPlanRecord[]> {
-    return this.prisma.subscriptionPlan.findMany({
+    const plans = await this.prisma.subscriptionPlan.findMany({
       where: { isActive: true },
       orderBy: { sortOrder: 'asc' },
     });
+    return plans.map(toPlanRecord);
   }
 
   /**
