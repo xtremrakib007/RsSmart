@@ -11,6 +11,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.retail.pos.viewmodel.SessionViewModel
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SessionScreen(
     onSessionOpen: () -> Unit,
