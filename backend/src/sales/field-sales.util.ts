@@ -2,7 +2,12 @@
 // selfie decoding). Tested in field-sales.util.spec.ts.
 
 /** Roles that manage the field team (assign customers and routes, see the team). */
-export const MANAGER_ROLES = ['admin', 'manager'];
+export const MANAGER_ROLES = ['owner', 'admin', 'manager'];
+
+/** Owner or admin: may change company-wide settings. */
+export function isAdmin(roles: string[] | undefined): boolean {
+  return (roles || []).some((r) => r === 'owner' || r === 'admin');
+}
 
 export function isManager(roles: string[] | undefined): boolean {
   return (roles || []).some((r) => MANAGER_ROLES.includes(r));

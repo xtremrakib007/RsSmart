@@ -61,6 +61,8 @@ export class OrdersService {
       taxAmount += itemTax;
       return {
         ...item,
+        taxRate: item.taxRate || 0, // optional on the request, required in the table
+        discount: item.discount || 0,
         taxAmount: itemTax,
         total: itemTotal,
       };

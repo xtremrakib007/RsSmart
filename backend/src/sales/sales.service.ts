@@ -2,7 +2,7 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import { PrismaService } from '../common/prisma/prisma.service';
 import { UploadService } from '../upload/upload.service';
 import {
-  attendanceStatus, customerScope, decodeSelfie, isManager, minutesWorked, sortByDistance, workDateOf,
+  attendanceStatus, customerScope, decodeSelfie, isAdmin, isManager, minutesWorked, sortByDistance, workDateOf,
 } from './field-sales.util';
 import {
   DEFAULT_SALES_APP_CONFIG, SalesAppConfig, applySalesAppConfigPatch, mergeSalesAppConfig, sanitizeSalesAppConfigPatch, updateStatus,
@@ -88,13 +88,13 @@ export class SalesService {
       features,
       menuOrder: cfg.menuOrder.filter((f) => features[f]),
       updateStatus: updateStatus(cfg, versionCode),
-      canEditSettings: (roles || []).includes('admin'),
+      canEditSettings: isAdmin(roles),
     };
   }
 
   /** Admin changes some settings; the rest stay as they are. */
   async updateAppConfig(tenantId: string, roles: string[], patch: unknown) {
-    if (!(roles || []).includes('admin')) throw new ForbiddenException('Only an admin can change the sales app settings.');
+    if (!isAdmin(roles)) throw new ForbiddenException('Only an admin can change the sales app settings.');
     let clean;
     try { clean = sanitizeSalesAppConfigPatch(patch); } catch (e: any) { throw new BadRequestException(e.message); }
     const t = await this.prisma.tenant.findUnique({ where: { id: tenantId }, select: { settings: true } });
@@ -107,7 +107,7 @@ export class SalesService {
 
   /** Back to the defaults for everything. */
   async resetAppConfig(tenantId: string, roles: string[]) {
-    if (!(roles || []).includes('admin')) throw new ForbiddenException('Only an admin can change the sales app settings.');
+    if (!isAdmin(roles)) throw new ForbiddenException('Only an admin can change the sales app settings.');
     const t = await this.prisma.tenant.findUnique({ where: { id: tenantId }, select: { settings: true } });
     if (!t) throw new NotFoundException('Tenant not found');
     const { salesApp: _old, ...rest } = (t.settings as Record<string, any>) || {};

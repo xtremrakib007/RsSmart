@@ -63,3 +63,12 @@ describe('field sales helpers', () => {
     expect(() => decodeSelfie('data:image/jpeg;base64,' + Buffer.alloc(2 * 1024 * 1024).toString('base64'), 'x')).toThrow(/too large/);
   });
 });
+
+describe('owner', () => {
+  it('the company owner counts as manager and admin', () => {
+    const { isAdmin } = require('./field-sales.util');
+    expect(isManager(['owner'])).toBe(true);
+    expect(isAdmin(['owner'])).toBe(true);
+    expect(isAdmin(['manager'])).toBe(false);
+  });
+});

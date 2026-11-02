@@ -18,7 +18,7 @@ class AuthRepository @Inject constructor(
     val userId: Flow<String?> = tokenProvider.userId
     val userRoles: Flow<Set<String>> = tokenProvider.userRoles
     /** Admins and managers manage the field team. */
-    val isManager: Flow<Boolean> = tokenProvider.userRoles.map { roles -> roles.any { it == "admin" || it == "manager" } }
+    val isManager: Flow<Boolean> = tokenProvider.userRoles.map { roles -> roles.any { it == "owner" || it == "admin" || it == "manager" } }
 
     suspend fun login(email: String, password: String, tenantId: String): Result<LoginResponse> {
         return try {

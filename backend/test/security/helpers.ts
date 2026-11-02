@@ -83,6 +83,14 @@ export async function seedTenant(app: INestApplication, suffix: string): Promise
     .expect(201);
   const orderId = orderRes.body.id;
 
+  // The company's roles: the "manager" here reaches every outlet (admin),
+  // the "staff" member only their own outlet (cashier).
+  const rolesRes = await request(app.getHttpServer())
+    .get('/users/roles/list')
+    .set('Authorization', `Bearer ${ownerToken}`)
+    .expect(200);
+  const roleId = (name: string) => rolesRes.body.find((r: any) => r.name === name)?.id;
+
   // Invite manager
   const inviteRes = await request(app.getHttpServer())
     .post('/invitations')
@@ -91,7 +99,7 @@ export async function seedTenant(app: INestApplication, suffix: string): Promise
       email: `manager-${suffix}@test.com`,
       firstName: 'Manager',
       lastName: 'Test',
-      roleIds: [],
+      roleIds: [roleId('admin')],
       outletIds: [outletId],
     })
     .expect(201);
@@ -103,7 +111,7 @@ export async function seedTenant(app: INestApplication, suffix: string): Promise
       token: inviteRes.body.token,
       password: 'Password123!',
     })
-    .expect(201);
+    .expect(200);
   const managerToken = acceptRes.body.accessToken;
 
   // Invite staff (scoped to one outlet only)
@@ -114,7 +122,7 @@ export async function seedTenant(app: INestApplication, suffix: string): Promise
       email: `staff-${suffix}@test.com`,
       firstName: 'Staff',
       lastName: 'Test',
-      roleIds: [],
+      roleIds: [roleId('cashier')],
       outletIds: [outletId],
     })
     .expect(201);
@@ -125,7 +133,7 @@ export async function seedTenant(app: INestApplication, suffix: string): Promise
       token: staffInviteRes.body.token,
       password: 'Password123!',
     })
-    .expect(201);
+    .expect(200);
   const staffToken = staffAcceptRes.body.accessToken;
 
   return {
