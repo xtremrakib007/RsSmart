@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { EntitlementsService } from '../entitlements/entitlements.service';
 import { UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
@@ -61,6 +62,8 @@ describe('AuthService', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: AuditService, useValue: audit },
         { provide: SubscriptionsService, useValue: subscriptions },
+        // Plan limits: allow by default; limit tests override checkUserLimit.
+        { provide: EntitlementsService, useValue: { checkUserLimit: jest.fn().mockResolvedValue({ allowed: true, current: 0, limit: 10 }) } },
         {
           provide: JwtService,
           useValue: {

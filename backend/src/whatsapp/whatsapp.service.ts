@@ -8,7 +8,7 @@ import { SendWhatsAppMessageDto } from './dto/send-whatsapp-message.dto';
 import { UpdateConversationDto } from './dto/update-conversation.dto';
 import { AddNoteDto } from './dto/add-note.dto';
 import { MockWhatsAppProvider } from './providers/mock-whatsapp.provider';
-import { WhatsAppTemplateParams, WhatsAppMediaMessage } from './providers/whatsapp-provider';
+import { WhatsAppProvider, WhatsAppTemplateParams, WhatsAppMediaMessage } from './providers/whatsapp-provider';
 import { MetaCloudWhatsAppProvider } from './providers/meta-cloud-whatsapp.provider';
 import { OrdersService } from '../orders/orders.service';
 import { UpdateCartDto } from './dto/update-cart.dto';
@@ -31,7 +31,7 @@ export class WhatsAppService {
     private readonly retryService: WhatsAppRetryService,
   ) {}
 
-  private providerFor(provider: string) { return provider === 'META_CLOUD' ? this.metaProvider : this.mockProvider; }
+  private providerFor(provider: string): WhatsAppProvider { return provider === 'META_CLOUD' ? this.metaProvider : this.mockProvider; }
 
   listAccounts(tenantId: string) {
     return this.prisma.whatsAppAccount.findMany({
@@ -121,6 +121,7 @@ export class WhatsAppService {
 
         try {
           result = await this.receiveWebhook(account.tenantId, {
+            eventId: message.id,
             accountId: account.id,
             providerMessageId: message.id,
             from: message.from,
@@ -500,7 +501,11 @@ export class WhatsAppService {
     if (!cart || cart.items.length === 0) throw new BadRequestException('Cart is empty');
 
     const salesRepId = conversation.assignedUserId || conversation.account.createdByUserId || userId;
-    const order = await this.orders.create(tenantId, salesRepId, {
+    // The order goes to the tenant's default outlet (WhatsApp is not tied to one shop).
+    const outlet = await this.prisma.outlet.findFirst({ where: { tenantId, isDefault: true }, select: { id: true } })
+      ?? await this.prisma.outlet.findFirst({ where: { tenantId }, orderBy: { createdAt: 'asc' }, select: { id: true } });
+    if (!outlet) throw new BadRequestException('No outlet to place the order in');
+    const order = await this.orders.create(tenantId, outlet.id, salesRepId, {
       customerId,
       source: 'WHATSAPP',
       notes: dto.notes,

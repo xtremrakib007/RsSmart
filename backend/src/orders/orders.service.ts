@@ -61,6 +61,8 @@ export class OrdersService {
       taxAmount += itemTax;
       return {
         ...item,
+        taxRate: item.taxRate || 0, // optional on the request, required in the table
+        discount: item.discount || 0,
         taxAmount: itemTax,
         total: itemTotal,
       };
@@ -101,8 +103,12 @@ export class OrdersService {
       updateData.approvedBy = approvedBy;
       updateData.approvedAt = new Date();
     }
+    // Only an order of the caller's own company: update by id alone would let
+    // one tenant change another tenant's order.
+    const existing = await this.prisma.order.findFirst({ where: { id, tenantId }, select: { id: true } });
+    if (!existing) throw new NotFoundException('Order not found');
     const order = await this.prisma.order.update({
-      where: { id },
+      where: { id: existing.id },
       data: updateData,
       include: { customer: true, items: { include: { product: true } } },
     });
@@ -123,7 +129,7 @@ export class OrdersService {
           source: order.source,
           createdAt: order.createdAt,
           customer: order.customer,
-          items: order.items,
+          items: order.items.map((i) => ({ ...i, quantity: Number(i.quantity), total: Number(i.total) })),
         })
         .catch(() => {
           // NotificationsService already logs; this catch just guarantees

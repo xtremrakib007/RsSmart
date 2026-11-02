@@ -50,12 +50,21 @@ export class InventoryService {
     notes?: string;
     referenceId?: string;
   }) {
-    const inventory = await this.prisma.inventory.findFirst({
+    let inventory = await this.prisma.inventory.findFirst({
       where: { tenantId, outletId, productId: data.productId },
     });
 
     if (!inventory) {
-      throw new NotFoundException('Inventory record not found for this product at this outlet');
+      // First stock of a product at this outlet: receiving or counting it
+      // opens the outlet's stock record; taking stock out cannot.
+      if (data.type === 'OUTBOUND') {
+        throw new NotFoundException('Inventory record not found for this product at this outlet');
+      }
+      const product = await this.prisma.product.findFirst({ where: { id: data.productId, tenantId }, select: { id: true } });
+      if (!product) throw new NotFoundException('Product not found');
+      inventory = await this.prisma.inventory.create({
+        data: { tenantId, outletId, productId: product.id, quantity: 0, reserved: 0, version: 0 },
+      });
     }
 
     let newQuantity = Number(inventory.quantity);
@@ -70,12 +79,17 @@ export class InventoryService {
     }
 
     // Phase 26: optimistic locking — only succeed if version hasn't changed since read.
-    const [updatedInventory, movement] = await this.prisma.$transaction([
-      this.prisma.inventory.updateMany({
+    // The movement is written only when the update won, in the same
+    // transaction, so a conflicting call leaves no movement behind.
+    const movement = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.inventory.updateMany({
         where: { id: inventory.id, version: inventory.version },
         data: { quantity: newQuantity, version: { increment: 1 } },
-      }),
-      this.prisma.stockMovement.create({
+      });
+      if (updated.count === 0) {
+        throw new ConflictException('Inventory was modified by another operation. Please retry.');
+      }
+      return tx.stockMovement.create({
         data: {
           tenantId,
           outletId,
@@ -86,12 +100,8 @@ export class InventoryService {
           notes: data.notes,
           createdBy: userId,
         },
-      }),
-    ]);
-
-    if (updatedInventory.count === 0) {
-      throw new ConflictException('Inventory was modified by another operation. Please retry.');
-    }
+      });
+    });
 
     return { inventory: { ...inventory, quantity: newQuantity, version: inventory.version + 1 }, movement };
   }
@@ -159,7 +169,7 @@ export class InventoryService {
       throw new BadRequestException('Insufficient stock at source');
     }
 
-    let toInv = await this.prisma.inventory.findFirst({
+    const toInv = await this.prisma.inventory.findFirst({
       where: { tenantId, outletId, productId: data.productId, warehouseId: data.toWarehouseId || null },
     });
 

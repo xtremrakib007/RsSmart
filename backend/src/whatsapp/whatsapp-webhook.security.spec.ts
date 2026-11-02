@@ -216,6 +216,7 @@ describe('WhatsApp Webhook Security (Phase 28)', () => {
       prisma.webhookDelivery.create.mockResolvedValue({});
 
       await service.receiveWebhook(tenantId, {
+        eventId: 'evt-1',
         accountId,
         providerMessageId: messageId,
         from: '+60123456789',
@@ -227,7 +228,7 @@ describe('WhatsApp Webhook Security (Phase 28)', () => {
       // Account lookup must use the accountId from the DTO, which came from
       // the phone_number_id → account mapping in receiveMetaWebhook.
       expect(prisma.whatsAppAccount.findFirst).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { phoneNumberId, provider: 'META_CLOUD' } }),
+        expect.objectContaining({ where: { id: accountId, tenantId } }),
       );
     });
   });

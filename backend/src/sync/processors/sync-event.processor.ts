@@ -6,6 +6,12 @@ import { ConflictResolutionService } from '../conflict-resolution.service';
 import { NotificationsGateway } from '../../websocket/notifications.gateway';
 import { PushService } from '../../push/push.service';
 
+/** A device payload without the fields the server sets (tenant, timestamps). */
+function withoutTenant(payload: any) {
+  const { tenantId: _t, createdAt: _c, updatedAt: _u, ...rest } = payload || {};
+  return rest;
+}
+
 @Processor('sync-events')
 export class SyncEventProcessor extends WorkerHost {
   private readonly logger = new Logger(SyncEventProcessor.name);
@@ -133,6 +139,19 @@ export class SyncEventProcessor extends WorkerHost {
     }
   }
 
+  /**
+   * Updates a record only if it belongs to the event's tenant. The payload
+   * comes from a device, so its id is not trusted on its own.
+   */
+  private async updateOwn(model: 'order' | 'customer', payload: any, tenantId: string) {
+    const { id, ...data } = withoutTenant(payload);
+    if (!id) throw new Error(`${model} update without an id`);
+    const delegate: any = (this.prisma as any)[model];
+    const res = await delegate.updateMany({ where: { id, tenantId }, data });
+    if (res.count === 0) throw new Error(`${model} ${id} not found`);
+    return delegate.findFirst({ where: { id, tenantId } });
+  }
+
   private async applyEvent(event: any) {
     const { entityType, action, payload, tenantId } = event;
 
@@ -140,9 +159,9 @@ export class SyncEventProcessor extends WorkerHost {
       case 'order':
         return this.applyOrderEvent(action, payload, tenantId);
       case 'customer':
-        return this.applyCustomerEvent(action, payload);
+        return this.applyCustomerEvent(action, payload, tenantId);
       case 'customer_visit':
-        return this.applyVisitEvent(action, payload);
+        return this.applyVisitEvent(action, payload, tenantId);
       case 'expense':
         return this.applyExpenseEvent(action, payload);
       default:
@@ -173,7 +192,8 @@ export class SyncEventProcessor extends WorkerHost {
 
       return this.prisma.order.create({
         data: {
-          ...payload,
+          ...withoutTenant(payload),
+          tenantId,
           status: 'PENDING_APPROVAL',
           source: 'SALES_APP',
         },
@@ -181,30 +201,24 @@ export class SyncEventProcessor extends WorkerHost {
       });
     }
     if (action === 'UPDATE') {
-      return this.prisma.order.update({
-        where: { id: payload.id },
-        data: payload,
-      });
+      return this.updateOwn('order', payload, tenantId);
     }
     throw new Error(`Unsupported order action: ${action}`);
   }
 
-  private async applyCustomerEvent(action: string, payload: any) {
+  private async applyCustomerEvent(action: string, payload: any, tenantId: string) {
     if (action === 'CREATE') {
-      return this.prisma.customer.create({ data: payload });
+      return this.prisma.customer.create({ data: { ...withoutTenant(payload), tenantId } });
     }
     if (action === 'UPDATE') {
-      return this.prisma.customer.update({
-        where: { id: payload.id },
-        data: payload,
-      });
+      return this.updateOwn('customer', payload, tenantId);
     }
     throw new Error(`Unsupported customer action: ${action}`);
   }
 
-  private async applyVisitEvent(action: string, payload: any) {
+  private async applyVisitEvent(action: string, payload: any, tenantId: string) {
     if (action === 'CREATE') {
-      return this.prisma.customerVisit.create({ data: payload });
+      return this.prisma.customerVisit.create({ data: { ...withoutTenant(payload), tenantId } });
     }
     throw new Error(`Unsupported visit action: ${action}`);
   }

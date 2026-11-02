@@ -19,14 +19,19 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     await this.$disconnect();
   }
 
+  /**
+   * Empties every table for e2e tests. Runs only with NODE_ENV=test (never
+   * on a misconfigured server) and keeps the migration history and the
+   * subscription plans the tests sign up on.
+   */
   async cleanDatabase() {
-    if (process.env.NODE_ENV !== 'production') {
-      const models = ['auditLogs', 'syncEvents', 'posSessions', 'payments', 'orderItems', 
-        'orders', 'customerVisits', 'customers', 'stockMovements', 'inventory', 
-        'products', 'categories', 'units', 'userRoles', 'roles', 'users', 'tenants'];
-      for (const model of models) {
-        await (this as any)[model].deleteMany().catch(() => null);
-      }
-    }
+    if (process.env.NODE_ENV !== 'test') return;
+    const rows = await this.$queryRawUnsafe<{ tablename: string }[]>(
+      `SELECT tablename FROM pg_tables WHERE schemaname = current_schema()
+         AND tablename NOT IN ('_prisma_migrations', 'subscription_plans')`,
+    );
+    if (!rows.length) return;
+    const list = rows.map((r) => `"${r.tablename.replace(/"/g, '""')}"`).join(', ');
+    await this.$executeRawUnsafe(`TRUNCATE TABLE ${list} CASCADE`);
   }
 }

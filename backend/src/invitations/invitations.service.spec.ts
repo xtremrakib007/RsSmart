@@ -35,7 +35,7 @@ describe('InvitationsService', () => {
     };
     audit = { log: jest.fn() };
     auth = { login: jest.fn().mockResolvedValue({ accessToken: 'signed-token' }) };
-    entitlements = { checkUserLimit: jest.fn().mockResolvedValue(undefined) };
+    entitlements = { checkUserLimit: jest.fn().mockResolvedValue({ allowed: true, current: 0, limit: 10 }) };
     service = new InvitationsService(prisma, audit as any, auth as any, entitlements as any);
   });
 

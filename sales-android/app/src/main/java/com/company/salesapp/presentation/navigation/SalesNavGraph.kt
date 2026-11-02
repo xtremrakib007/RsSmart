@@ -16,6 +16,11 @@ import com.company.salesapp.presentation.visits.VisitRecordScreen
 import com.company.salesapp.presentation.collections.CollectionScreen
 import com.company.salesapp.presentation.expenses.ExpenseScreen
 import com.company.salesapp.presentation.sync.SyncStatusScreen
+import com.company.salesapp.presentation.field.AttendanceScreen
+import com.company.salesapp.presentation.field.NearbyScreen
+import com.company.salesapp.presentation.field.TeamAttendanceScreen
+import com.company.salesapp.presentation.field.TodayScreen
+import com.company.salesapp.presentation.settings.AppSettingsScreen
 
 @Composable
 fun SalesNavGraph(navController: NavHostController) {
@@ -44,5 +49,10 @@ fun SalesNavGraph(navController: NavHostController) {
         composable(Screen.Collections.route) { CollectionScreen(navController) }
         composable(Screen.Expenses.route) { ExpenseScreen(navController) }
         composable(Screen.SyncStatus.route) { SyncStatusScreen(navController) }
+        composable(Screen.Attendance.route) { AttendanceScreen(navController) }
+        composable(Screen.Today.route) { TodayScreen(navController) }
+        composable(Screen.Nearby.route) { NearbyScreen(navController) }
+        composable(Screen.TeamAttendance.route) { TeamAttendanceScreen(navController) }
+        composable(Screen.AppSettings.route) { AppSettingsScreen(navController) }
     }
 }

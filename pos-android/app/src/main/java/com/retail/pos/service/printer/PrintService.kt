@@ -61,30 +61,18 @@ class PrintService @Inject constructor(
 
     private fun buildReceiptText(order: PosOrder): String {
         val sb = StringBuilder()
-        sb.append("[C]<b>RETAIL POS</b>
-")
-        sb.append("[C]------------------------------
-")
-        sb.append("[L]Receipt: [R]${order.receiptNumber}
-")
-        sb.append("[L]Date: [R]${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm").format(java.util.Date(order.createdAt))}
-")
+        sb.append("[C]<b>RETAIL POS</b>\n")
+        sb.append("[C]------------------------------\n")
+        sb.append("[L]Receipt: [R]${order.receiptNumber}\n")
+        sb.append("[L]Date: [R]${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm").format(java.util.Date(order.createdAt))}\n")
         if (order.customerName != null) {
-            sb.append("[L]Customer: [R]${order.customerName}
-")
+            sb.append("[L]Customer: [R]${order.customerName}\n")
         }
-        sb.append("[C]------------------------------
-")
-        sb.append("[L]<b>Total:</b>[R]<b>$${"%.2f".format(order.grandTotal)}</b>
-")
-        sb.append("[C]------------------------------
-")
-        sb.append("[C]Thank you for your purchase!
-")
-        sb.append("[C]
-
-
-")
+        sb.append("[C]------------------------------\n")
+        sb.append("[L]<b>Total:</b>[R]<b>$${"%.2f".format(order.grandTotal)}</b>\n")
+        sb.append("[C]------------------------------\n")
+        sb.append("[C]Thank you for your purchase!\n")
+        sb.append("[C]\n\n\n")
         return sb.toString()
     }
 }

@@ -10,7 +10,7 @@ describe('SyncService — Offline Sync Hardening (Phase 27)', () => {
 
   beforeEach(() => {
     prisma = {
-      $transaction: jest.fn((fn: any) => fn(prisma)),
+      $transaction: jest.fn((arg: any) => (typeof arg === 'function' ? arg(prisma) : Promise.all(arg))),
       syncEvent: {
         findUnique: jest.fn(),
         findFirst: jest.fn(),
