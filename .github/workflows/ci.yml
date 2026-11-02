@@ -105,10 +105,15 @@ jobs:
       - name: Build
         run: npm run build
 
+      # Checks the production rules with production-shaped dummy values (the
+      # test values above are deliberately short).
       - name: Validate environment variables
         run: npm run validate:env
         env:
           NODE_ENV: production
+          JWT_SECRET: ci-only-placeholder-jwt-secret-0123456789abcdef
+          JWT_REFRESH_SECRET: ci-only-placeholder-refresh-secret-0123456789ab
+          REDIS_PASSWORD: ci-only-placeholder
 
       - name: Verify production readiness
         run: npm run verify:production

@@ -3,12 +3,11 @@ import { INestApplication } from '@nestjs/common';
 import * as request from 'supertest';
 import { AppModule } from '../../src/app.module';
 import { PrismaService } from '../../src/common/prisma/prisma.service';
-import { SyncQueueService } from '../../src/common/queue/sync-queue.service';
+import { seedTenant } from '../security/helpers';
 
 describe('Sync E2E', () => {
   let app: INestApplication;
   let prisma: PrismaService;
-  let queueService: SyncQueueService;
   let authToken: string;
   let tenantId: string;
   const clientId = 'test-device-001';
@@ -22,35 +21,10 @@ describe('Sync E2E', () => {
     await app.init();
 
     prisma = moduleFixture.get<PrismaService>(PrismaService);
-    queueService = moduleFixture.get<SyncQueueService>(SyncQueueService);
 
-    // Clean database
-    await prisma.cleanDatabase();
-
-    // Seed minimal data
-    const tenant = await prisma.tenant.create({
-      data: { name: 'Test Tenant', slug: 'test-tenant' },
-    });
-    tenantId = tenant.id;
-
-    const hashedPassword = '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.VTtYA.qGZvKG6'; // password123
-    const user = await prisma.user.create({
-      data: {
-        tenantId,
-        email: 'test@sync.com',
-        password: hashedPassword,
-        firstName: 'Test',
-        lastName: 'User',
-        status: 'ACTIVE',
-      },
-    });
-
-    // Login
-    const loginRes = await request(app.getHttpServer())
-      .post('/auth/login')
-      .send({ email: 'test@sync.com', password: 'password123', tenantId });
-
-    authToken = loginRes.body.data.accessToken;
+    const tenant = await seedTenant(app, 'SYNCE2E');
+    tenantId = tenant.tenantId;
+    authToken = tenant.ownerToken;
   });
 
   afterAll(async () => {
@@ -80,8 +54,8 @@ describe('Sync E2E', () => {
         .send({ clientId, events })
         .expect(200);
 
-      expect(response.body.data).toHaveLength(1);
-      expect(response.body.data[0].status).toBe('PENDING');
+      expect(response.body).toHaveLength(1);
+      expect(response.body[0].status).toBe('created');
     });
 
     it('should handle delta updates', async () => {
@@ -108,7 +82,7 @@ describe('Sync E2E', () => {
         .send({ clientId, events })
         .expect(200);
 
-      expect(response.body.data[0].status).toBe('PENDING');
+      expect(response.body[0].status).toBe('created');
     });
   });
 
@@ -126,6 +100,7 @@ describe('Sync E2E', () => {
           payload: { name: 'Server Customer' },
           status: 'COMPLETED',
           processedAt: new Date(),
+          vectorClock: {},
         },
       });
 
@@ -139,7 +114,7 @@ describe('Sync E2E', () => {
         })
         .expect(200);
 
-      expect(Array.isArray(response.body.data)).toBe(true);
+      expect(Array.isArray(response.body)).toBe(true);
     });
   });
 
@@ -150,9 +125,9 @@ describe('Sync E2E', () => {
         .set('Authorization', `Bearer ${authToken}`)
         .expect(200);
 
-      expect(response.body.data.clientId).toBe(clientId);
-      expect(response.body.data).toHaveProperty('pendingEvents');
-      expect(response.body.data).toHaveProperty('failedEvents');
+      expect(response.body.clientId).toBe(clientId);
+      expect(response.body).toHaveProperty('pendingEvents');
+      expect(response.body).toHaveProperty('failedEvents');
     });
   });
 
@@ -163,9 +138,9 @@ describe('Sync E2E', () => {
         .set('Authorization', `Bearer ${authToken}`)
         .expect(200);
 
-      expect(response.body.data).toHaveProperty('summary');
-      expect(response.body.data).toHaveProperty('deviceStats');
-      expect(response.body.data).toHaveProperty('alerts');
+      expect(response.body).toHaveProperty('summary');
+      expect(response.body).toHaveProperty('deviceStats');
+      expect(response.body).toHaveProperty('alerts');
     });
   });
 
@@ -183,6 +158,7 @@ describe('Sync E2E', () => {
           payload: { total: 100 },
           status: 'COMPLETED',
           processedAt: new Date(),
+          vectorClock: {},
         },
       });
 
@@ -204,7 +180,7 @@ describe('Sync E2E', () => {
         .expect(200);
 
       // Event should be queued, processor will handle conflict
-      expect(response.body.data[0].status).toBe('PENDING');
+      expect(response.body[0].status).toBe('created');
     });
   });
 
@@ -222,6 +198,7 @@ describe('Sync E2E', () => {
           payload: {},
           status: 'FAILED',
           error: 'Test failure',
+          vectorClock: {},
         },
       });
 
@@ -230,7 +207,7 @@ describe('Sync E2E', () => {
         .set('Authorization', `Bearer ${authToken}`)
         .expect(200);
 
-      expect(response.body.data.retried).toBeGreaterThanOrEqual(1);
+      expect(response.body.retried).toBeGreaterThanOrEqual(1);
     });
   });
 });

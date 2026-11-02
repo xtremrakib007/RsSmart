@@ -18,6 +18,8 @@ describe('Production Test Pack (Phase 36)', () => {
   let tenantId: string;
   let outletId: string;
   let productId: string;
+  let sessionId: string;
+  let receiptNumber: string;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -55,7 +57,7 @@ describe('Production Test Pack (Phase 36)', () => {
       .set('Authorization', `Bearer ${ownerToken}`)
       .expect(200);
 
-    expect(subRes.body.status).toBe('TRIAL');
+    expect(subRes.body.status).toBe('TRIALING');
   });
 
   it('2. Owner can create a second outlet', async () => {
@@ -75,7 +77,12 @@ describe('Production Test Pack (Phase 36)', () => {
   });
 
   it('3. Owner can invite an employee', async () => {
-    await request(app.getHttpServer())
+    const roles = await request(app.getHttpServer())
+      .get('/users/roles/list')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .expect(200);
+    const cashier = roles.body.find((r: any) => r.name === 'cashier');
+    const res = await request(app.getHttpServer())
       .post('/invitations')
       .set('Authorization', `Bearer ${ownerToken}`)
       .send({
@@ -83,9 +90,10 @@ describe('Production Test Pack (Phase 36)', () => {
         firstName: 'Staff',
         lastName: 'User',
         outletIds: [outletId],
-        roleName: 'cashier',
+        roleIds: [cashier.id],
       })
       .expect(201);
+    expect(res.body.token).toBeTruthy();
   });
 
   it('4. Owner can create a product', async () => {
@@ -106,14 +114,14 @@ describe('Production Test Pack (Phase 36)', () => {
 
   it('5. Owner can add stock', async () => {
     await request(app.getHttpServer())
-      .post('/inventory/adjustments')
+      .post('/inventory/adjust')
       .set('Authorization', `Bearer ${ownerToken}`)
       .set('x-outlet-id', outletId)
       .send({
         productId,
-        outletId,
         quantity: 100,
-        reason: 'Initial stock',
+        type: 'INBOUND',
+        notes: 'Initial stock',
       })
       .expect(201);
   });
@@ -122,38 +130,49 @@ describe('Production Test Pack (Phase 36)', () => {
     const before = await prisma.inventory.findFirst({
       where: { productId, outletId },
     });
-    expect(before?.quantity).toBe(100);
+    expect(Number(before?.quantity)).toBe(100);
 
-    await request(app.getHttpServer())
-      .post('/pos-transactions')
+    // A sale needs an open till session.
+    const session = await request(app.getHttpServer())
+      .post('/pos-sessions/open')
       .set('Authorization', `Bearer ${ownerToken}`)
       .set('x-outlet-id', outletId)
+      .send({ deviceId: 'TILL-36', openingCash: 100 })
+      .expect(201);
+    sessionId = session.body.id;
+
+    const sale = await request(app.getHttpServer())
+      .post('/pos-transactions/checkout')
+      .set('Authorization', `Bearer ${ownerToken}`)
       .send({
+        sessionId,
         items: [{ productId, quantity: 3, unitPrice: 25 }],
-        totalAmount: 75,
-        paymentMethod: 'CASH',
+        payments: [{ method: 'CASH', amount: 75 }],
         clientTransactionId: 'pos-txn-36-001',
       })
       .expect(201);
+    receiptNumber = sale.body.receiptNumber;
 
     const after = await prisma.inventory.findFirst({
       where: { productId, outletId },
     });
-    expect(after?.quantity).toBe(97);
+    expect(Number(after?.quantity)).toBe(97);
   });
 
-  it('7. Duplicate POS sale with same clientTransactionId is rejected (idempotency)', async () => {
-    await request(app.getHttpServer())
-      .post('/pos-transactions')
+  it('7. A retried POS sale (same clientTransactionId) returns the first receipt and deducts nothing more', async () => {
+    const again = await request(app.getHttpServer())
+      .post('/pos-transactions/checkout')
       .set('Authorization', `Bearer ${ownerToken}`)
-      .set('x-outlet-id', outletId)
       .send({
+        sessionId,
         items: [{ productId, quantity: 3, unitPrice: 25 }],
-        totalAmount: 75,
-        paymentMethod: 'CASH',
+        payments: [{ method: 'CASH', amount: 75 }],
         clientTransactionId: 'pos-txn-36-001',
       })
-      .expect(409);
+      .expect(201);
+    expect(again.body.receiptNumber).toBe(receiptNumber);
+    const stock = await prisma.inventory.findFirst({ where: { productId, outletId } });
+    expect(Number(stock?.quantity)).toBe(97);
   });
 
   it('8. Subscription limits are enforced', async () => {
@@ -178,7 +197,8 @@ describe('Production Test Pack (Phase 36)', () => {
 
   it('10. Reports endpoint is accessible', async () => {
     await request(app.getHttpServer())
-      .get('/reports/sales-summary')
+      .get('/reports/sales')
+      .query({ fromDate: '2020-01-01', toDate: '2030-12-31' })
       .set('Authorization', `Bearer ${ownerToken}`)
       .expect(200);
   });

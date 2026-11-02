@@ -1,4 +1,5 @@
 import { ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
+import { ForbiddenException } from '@nestjs/common';
 import { OutletsService } from './outlets.service';
 
 describe('OutletsService', () => {
@@ -15,7 +16,7 @@ describe('OutletsService', () => {
       userOutlet: { findMany: jest.fn(), findUnique: jest.fn(), upsert: jest.fn(), updateMany: jest.fn(), count: jest.fn(), delete: jest.fn() },
     };
     audit = { log: jest.fn() };
-    service = new OutletsService(prisma, audit as any, { checkOutletLimit: jest.fn().mockResolvedValue({ allowed: true, current: 0, limit: 10 }) } as any);
+    service = new OutletsService(prisma, audit as any, { checkOutletLimit: jest.fn().mockResolvedValue({ allowed: true, current: 0, limit: 10 }), isSubscriptionActive: jest.fn().mockResolvedValue(true) } as any);
   });
 
   describe('get / tenant isolation', () => {
@@ -29,6 +30,12 @@ describe('OutletsService', () => {
   });
 
   describe('create', () => {
+    it('refuses a new outlet while the subscription is not active', async () => {
+      const lapsed = new OutletsService(prisma, audit as any, { isSubscriptionActive: jest.fn().mockResolvedValue(false), checkOutletLimit: jest.fn() } as any);
+      await expect(lapsed.create('t1', 'u1', { code: 'X', name: 'X' } as any)).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prisma.outlet.create).not.toHaveBeenCalled();
+    });
+
     it('rejects a duplicate outlet code within the same company', async () => {
       prisma.outlet.findUnique.mockResolvedValue({ id: 'existing' });
 

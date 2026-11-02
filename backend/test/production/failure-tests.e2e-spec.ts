@@ -16,6 +16,7 @@ describe('Failure Tests (Phase 36B)', () => {
   let tenantId: string;
   let outletId: string;
   let productId: string;
+  let sessionId: string;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -57,11 +58,20 @@ describe('Failure Tests (Phase 36B)', () => {
     productId = product.body.id;
 
     await request(app.getHttpServer())
-      .post('/inventory/adjustments')
+      .post('/inventory/adjust')
       .set('Authorization', `Bearer ${ownerToken}`)
       .set('x-outlet-id', outletId)
-      .send({ productId, outletId, quantity: 5, reason: 'Initial' })
+      .send({ productId, quantity: 5, type: 'INBOUND', notes: 'Initial' })
       .expect(201);
+
+    // POS sales need an open till session.
+    const session = await request(app.getHttpServer())
+      .post('/pos-sessions/open')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .set('x-outlet-id', outletId)
+      .send({ deviceId: 'TILL-FAIL', openingCash: 0 })
+      .expect(201);
+    sessionId = session.body.id;
   });
 
   afterAll(async () => {
@@ -70,12 +80,12 @@ describe('Failure Tests (Phase 36B)', () => {
 
   // ── Billing: Payment failure ───────────────────────────
   describe('Billing failures', () => {
-    it('rejects checkout with invalid plan slug', async () => {
-      await request(app.getHttpServer())
-        .post('/payments/checkout')
+    it('rejects checkout for a subscription that does not exist', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/payments/checkout/subscription')
         .set('Authorization', `Bearer ${ownerToken}`)
-        .send({ planSlug: 'nonexistent-plan', amount: 100 })
-        .expect(400);
+        .send({ subscriptionId: '00000000-0000-0000-0000-000000000000' });
+      expect([400, 404]).toContain(res.status);
     });
   });
 
@@ -97,51 +107,46 @@ describe('Failure Tests (Phase 36B)', () => {
       // Restore for other tests
       await prisma.subscription.updateMany({
         where: { tenantId },
-        data: { status: 'TRIAL' },
+        data: { status: 'TRIALING' },
       });
     });
   });
 
   // ── POS: Duplicate transaction ───────────────────────────
   describe('POS failures', () => {
-    it('rejects duplicate POS transaction with same clientTransactionId', async () => {
+    it('a duplicate POS transaction (same clientTransactionId) is not sold twice', async () => {
       const txnId = 'dup-txn-001';
-
-      await request(app.getHttpServer())
-        .post('/pos-transactions')
+      const sale = {
+        sessionId,
+        items: [{ productId, quantity: 1, unitPrice: 10 }],
+        payments: [{ method: 'CASH', amount: 10 }],
+        clientTransactionId: txnId,
+      };
+      const first = await request(app.getHttpServer())
+        .post('/pos-transactions/checkout')
         .set('Authorization', `Bearer ${ownerToken}`)
-        .set('x-outlet-id', outletId)
-        .send({
-          items: [{ productId, quantity: 1, unitPrice: 10 }],
-          totalAmount: 10,
-          paymentMethod: 'CASH',
-          clientTransactionId: txnId,
-        })
+        .send(sale)
         .expect(201);
-
-      await request(app.getHttpServer())
-        .post('/pos-transactions')
+      const second = await request(app.getHttpServer())
+        .post('/pos-transactions/checkout')
         .set('Authorization', `Bearer ${ownerToken}`)
-        .set('x-outlet-id', outletId)
-        .send({
-          items: [{ productId, quantity: 1, unitPrice: 10 }],
-          totalAmount: 10,
-          paymentMethod: 'CASH',
-          clientTransactionId: txnId,
-        })
-        .expect(409);
+        .send(sale)
+        .expect(201);
+      expect(second.body.receiptNumber).toBe(first.body.receiptNumber);
+      expect(await prisma.order.count({ where: { tenantId, clientTransactionId: txnId } })).toBe(1);
+      const stock = await prisma.inventory.findFirst({ where: { productId, outletId } });
+      expect(Number(stock?.quantity)).toBe(4);
     });
 
     // ── POS: Insufficient stock ────────────────────────────
     it('rejects POS sale when stock is insufficient', async () => {
       await request(app.getHttpServer())
-        .post('/pos-transactions')
+        .post('/pos-transactions/checkout')
         .set('Authorization', `Bearer ${ownerToken}`)
-        .set('x-outlet-id', outletId)
         .send({
+          sessionId,
           items: [{ productId, quantity: 999, unitPrice: 10 }],
-          totalAmount: 9990,
-          paymentMethod: 'CASH',
+          payments: [{ method: 'CASH', amount: 9990 }],
           clientTransactionId: 'insufficient-001',
         })
         .expect(400);
@@ -165,7 +170,6 @@ describe('Failure Tests (Phase 36B)', () => {
         .expect(201);
 
       const otherToken = res2.body.accessToken;
-      const otherTenantId = res2.body.user.tenantId;
 
       // Try to access first tenant's outlet with second tenant's token
       await request(app.getHttpServer())
@@ -183,8 +187,13 @@ describe('Failure Tests (Phase 36B)', () => {
         .send({ code: 'OUT2', name: 'Second', address: 'Jalan 2' })
         .expect(201);
 
-      // Invite staff to first outlet only
-      await request(app.getHttpServer())
+      // Invite a cashier to the first outlet only, and sign in as them
+      const roles = await request(app.getHttpServer())
+        .get('/users/roles/list')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .expect(200);
+      const cashier = roles.body.find((r: any) => r.name === 'cashier');
+      const invite = await request(app.getHttpServer())
         .post('/invitations')
         .set('Authorization', `Bearer ${ownerToken}`)
         .send({
@@ -192,14 +201,20 @@ describe('Failure Tests (Phase 36B)', () => {
           firstName: 'Staff',
           lastName: 'User',
           outletIds: [outletId],
-          roleName: 'cashier',
+          roleIds: [cashier.id],
         })
         .expect(201);
+      const accepted = await request(app.getHttpServer())
+        .post('/invitations/accept')
+        .send({ token: invite.body.token, password: 'Password123!' })
+        .expect(200);
 
-      // Staff tries to access second outlet
-      // (In a real test we'd accept the invitation and get a staff token)
-      // For now, verify the outlet isolation guard exists
-      expect(outlet2.body.id).not.toBe(outletId);
+      // The cashier cannot work at the second outlet
+      await request(app.getHttpServer())
+        .get('/inventory')
+        .set('Authorization', `Bearer ${accepted.body.accessToken}`)
+        .set('x-outlet-id', outlet2.body.id)
+        .expect(403);
     });
   });
 
