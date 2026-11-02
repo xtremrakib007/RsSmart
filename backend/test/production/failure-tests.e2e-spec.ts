@@ -29,7 +29,7 @@ describe('Failure Tests (Phase 36B)', () => {
 
     // Seed a company
     const res = await request(app.getHttpServer())
-      .post('/auth/register-company')
+      .post('/auth/register')
       .send({
         companyName: 'FailTestCo',
         email: 'owner@failtest.com',
@@ -153,7 +153,7 @@ describe('Failure Tests (Phase 36B)', () => {
     it('rejects access to another tenant\'s data', async () => {
       // Create a second tenant
       const res2 = await request(app.getHttpServer())
-        .post('/auth/register-company')
+        .post('/auth/register')
         .send({
           companyName: 'OtherCo',
           email: 'other@other.com',

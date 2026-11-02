@@ -36,7 +36,7 @@ describe('Production Test Pack (Phase 36)', () => {
 
   it('1. Signup creates company, owner, first outlet, and trial subscription', async () => {
     const res = await request(app.getHttpServer())
-      .post('/auth/register-company')
+      .post('/auth/register')
       .send({
         companyName: 'PilotCo-36',
         email: 'owner@pilot36.com',

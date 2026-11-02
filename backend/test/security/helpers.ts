@@ -20,7 +20,7 @@ export interface TestTenant {
 export async function seedTenant(app: INestApplication, suffix: string): Promise<TestTenant> {
   // Register company (triggers trial subscription, Phase 18)
   const companyRes = await request(app.getHttpServer())
-    .post('/auth/register-company')
+    .post('/auth/register')
     .send({
       companyName: `TestCo-${suffix}`,
       email: `owner-${suffix}@test.com`,
