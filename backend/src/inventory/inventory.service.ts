@@ -50,12 +50,21 @@ export class InventoryService {
     notes?: string;
     referenceId?: string;
   }) {
-    const inventory = await this.prisma.inventory.findFirst({
+    let inventory = await this.prisma.inventory.findFirst({
       where: { tenantId, outletId, productId: data.productId },
     });
 
     if (!inventory) {
-      throw new NotFoundException('Inventory record not found for this product at this outlet');
+      // First stock of a product at this outlet: receiving or counting it
+      // opens the outlet's stock record; taking stock out cannot.
+      if (data.type === 'OUTBOUND') {
+        throw new NotFoundException('Inventory record not found for this product at this outlet');
+      }
+      const product = await this.prisma.product.findFirst({ where: { id: data.productId, tenantId }, select: { id: true } });
+      if (!product) throw new NotFoundException('Product not found');
+      inventory = await this.prisma.inventory.create({
+        data: { tenantId, outletId, productId: product.id, quantity: 0, reserved: 0, version: 0 },
+      });
     }
 
     let newQuantity = Number(inventory.quantity);

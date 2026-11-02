@@ -12,6 +12,15 @@ import { CurrentUser } from '../common/decorators/user.decorator';
 export class UploadController {
   constructor(private uploadService: UploadService) {}
 
+  // Declared before ':folder' so POST /upload/url is not taken as a folder upload.
+  @Post('url')
+  @ApiOperation({ summary: 'Get presigned URL for file' })
+  async getFileUrl(@Body('filename') filename: string, @CurrentUser() user: any) {
+    this.enforceTenantOwnership(filename, user.tenantId);
+    const url = await this.uploadService.getFileUrl(filename);
+    return { filename, url };
+  }
+
   @Post(':folder')
   @ApiOperation({ summary: 'Upload file' })
   @ApiConsumes('multipart/form-data')
@@ -24,14 +33,6 @@ export class UploadController {
     // Phase 24: scope every uploaded object to the caller's tenant
     const tenantScopedFolder = `tenants/${user.tenantId}/${folder}`;
     const filename = await this.uploadService.uploadFile(file, tenantScopedFolder);
-    const url = await this.uploadService.getFileUrl(filename);
-    return { filename, url };
-  }
-
-  @Post('url')
-  @ApiOperation({ summary: 'Get presigned URL for file' })
-  async getFileUrl(@Body('filename') filename: string, @CurrentUser() user: any) {
-    this.enforceTenantOwnership(filename, user.tenantId);
     const url = await this.uploadService.getFileUrl(filename);
     return { filename, url };
   }

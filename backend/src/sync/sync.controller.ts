@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Body, Query, UseGuards, Param } from '@nestjs/common';
+import { Controller, Post, Get, Body, Query, UseGuards, Param, HttpCode } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import { SyncService } from './sync.service';
@@ -19,12 +19,14 @@ export class SyncController {
   ) {}
 
   @Post('push')
+  @HttpCode(200)
   @ApiOperation({ summary: 'Push offline events to server' })
   pushEvents(@Body() body: PushEventsDto, @CurrentUser() user: any) {
     return this.syncService.pushEvents(user.tenantId, body.clientId, body.events);
   }
 
   @Post('pull')
+  @HttpCode(200)
   @ApiOperation({ summary: 'Pull server events since last sync' })
   pullEvents(@Body() body: PullEventsDto, @CurrentUser() user: any) {
     return this.syncService.pullEvents(user.tenantId, body.clientId, body.lastSyncAt, {
@@ -35,6 +37,7 @@ export class SyncController {
   }
 
   @Post('ack')
+  @HttpCode(200)
   @ApiOperation({ summary: 'Acknowledge received events to prevent duplicates on retry' })
   ackEvents(@Body() body: AckEventsDto, @CurrentUser() user: any) {
     return this.syncService.ackEvents(user.tenantId, body.clientId, body.eventIds);

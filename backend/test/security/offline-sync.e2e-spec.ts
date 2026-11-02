@@ -2,11 +2,13 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import * as request from 'supertest';
 import { AppModule } from '../../src/app.module';
+import { PrismaService } from '../../src/common/prisma/prisma.service';
 import { seedTenant, TestTenant } from '../security/helpers';
 
 describe('Offline Sync Hardening (Phase 27)', () => {
   let app: INestApplication;
   let tenant: TestTenant;
+  let prisma: PrismaService;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -14,6 +16,7 @@ describe('Offline Sync Hardening (Phase 27)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
+    prisma = moduleFixture.get(PrismaService);
     await app.init();
 
     tenant = await seedTenant(app, 'SYNC');
@@ -107,6 +110,14 @@ describe('Offline Sync Hardening (Phase 27)', () => {
         .expect(200);
 
       const eventId = pushRes.body[0].eventId;
+
+      // Events are processed by the queue worker; pull returns only processed ones.
+      for (let i = 0; i < 60; i++) {
+        const ev = await prisma.syncEvent.findUnique({ where: { id: eventId } });
+        if (ev?.status === 'COMPLETED' || ev?.status === 'FAILED') break;
+        await new Promise((r) => setTimeout(r, 250));
+      }
+      expect((await prisma.syncEvent.findUnique({ where: { id: eventId } }))?.status).toBe('COMPLETED');
 
       // Pull as the first device
       const pull1 = await request(app.getHttpServer())
