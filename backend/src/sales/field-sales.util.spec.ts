@@ -1,5 +1,5 @@
 import {
-  attendanceStatus, customerScope, decodeSelfie, haversineKm, isManager, minutesWorked, sortByDistance, workDateOf,
+  isAdmin, attendanceStatus, customerScope, decodeSelfie, haversineKm, isManager, minutesWorked, sortByDistance, workDateOf,
 } from './field-sales.util';
 
 describe('field sales helpers', () => {
@@ -66,7 +66,6 @@ describe('field sales helpers', () => {
 
 describe('owner', () => {
   it('the company owner counts as manager and admin', () => {
-    const { isAdmin } = require('./field-sales.util');
     expect(isManager(['owner'])).toBe(true);
     expect(isAdmin(['owner'])).toBe(true);
     expect(isAdmin(['manager'])).toBe(false);
