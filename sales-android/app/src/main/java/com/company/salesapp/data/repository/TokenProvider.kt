@@ -42,6 +42,7 @@ class TokenProvider @Inject constructor(@ApplicationContext context: Context) {
     val refreshToken: Flow<String?> = dataStore.data.map { it[REFRESH_TOKEN_KEY] }
     val tenantId: Flow<String?> = dataStore.data.map { it[TENANT_ID_KEY] }
     val userId: Flow<String?> = dataStore.data.map { it[USER_ID_KEY] }
+    val userRoles: Flow<Set<String>> = dataStore.data.map { it[USER_ROLES_KEY] ?: emptySet() }
 
     /** Synchronous read for use inside OkHttp's synchronous Interceptor.intercept(). */
     fun currentTokenBlocking(): String? = runBlocking { token.first() }

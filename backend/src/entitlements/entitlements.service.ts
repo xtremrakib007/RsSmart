@@ -116,6 +116,11 @@ export class EntitlementsService {
     };
   }
 
+  /** Trialing or active, and not past its period end. */
+  isSubscriptionActive(tenantId: string): Promise<boolean> {
+    return this.subscriptions.isActive(tenantId);
+  }
+
   async checkOutletLimit(tenantId: string): Promise<LimitCheck> {
     const { maxOutlets } = await this.getPlanLimits(tenantId);
     const current = await this.countOutlets(tenantId);

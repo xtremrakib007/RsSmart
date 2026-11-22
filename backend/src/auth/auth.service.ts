@@ -155,7 +155,7 @@ export class AuthService {
           password: hashedPassword,
           firstName: data.firstName,
           lastName: data.lastName,
-          roles: { create: [{ roleId: createdRoles['owner'].id }] },
+          roles: { create: [{ tenantId: tenant.id, roleId: createdRoles['owner'].id }] },
           outlets: { create: [{ tenantId: tenant.id, outletId: outlet.id, isDefault: true }] },
         },
         include: { roles: { include: { role: true } } },
@@ -302,7 +302,7 @@ export class AuthService {
         firstName: data.firstName,
         lastName: data.lastName,
         tenantId: inviterTenantId,
-        roles: { create: data.roleIds.map((roleId) => ({ roleId })) },
+        roles: { create: data.roleIds.map((roleId) => ({ tenantId: inviterTenantId, roleId })) },
         outlets: {
           create: outlets.map((o, i) => ({
             tenantId: inviterTenantId,

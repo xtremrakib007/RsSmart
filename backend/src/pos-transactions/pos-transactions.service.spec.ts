@@ -1,3 +1,4 @@
+import { PrismaService } from '../common/prisma/prisma.service';
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { PosTransactionsService } from './pos-transactions.service';
@@ -61,12 +62,23 @@ describe('PosTransactionsService — Idempotency (Phase 25)', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PosTransactionsService,
-        { provide: 'PrismaService', useValue: prisma },
+        { provide: PrismaService, useValue: prisma },
       ],
     }).compile();
 
     service = module.get<PosTransactionsService>(PosTransactionsService);
     (service as any).prisma = prisma;
+    // The receipt is read back with order.findFirst: return whichever
+    // order the test's findUnique/create produced for that id.
+    prisma.order.findFirst.mockImplementation(async ({ where }: any) => {
+      for (const m of [prisma.order.findUnique, prisma.order.create]) {
+        for (const r of m.mock.results) {
+          const v = await r.value;
+          if (v && v.id === where.id) return { customer: { name: 'Walk-in Customer' }, items: [], payments: [], ...v };
+        }
+      }
+      return null;
+    });
   });
 
   describe('checkout idempotency', () => {
@@ -208,12 +220,23 @@ describe('PosTransactionsService — Concurrent Stock Deduction (Phase 26)', () 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PosTransactionsService,
-        { provide: 'PrismaService', useValue: prisma },
+        { provide: PrismaService, useValue: prisma },
       ],
     }).compile();
 
     service = module.get<PosTransactionsService>(PosTransactionsService);
     (service as any).prisma = prisma;
+    // The receipt is read back with order.findFirst: return whichever
+    // order the test's findUnique/create produced for that id.
+    prisma.order.findFirst.mockImplementation(async ({ where }: any) => {
+      for (const m of [prisma.order.findUnique, prisma.order.create]) {
+        for (const r of m.mock.results) {
+          const v = await r.value;
+          if (v && v.id === where.id) return { customer: { name: 'Walk-in Customer' }, items: [], payments: [], ...v };
+        }
+      }
+      return null;
+    });
   });
 
   const checkoutPayload = {

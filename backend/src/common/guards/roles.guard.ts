@@ -24,6 +24,8 @@ export class RolesGuard implements CanActivate {
     if (!requiredRoles) return true;
 
     const { user } = context.switchToHttp().getRequest();
+    // The company owner can do everything an admin can.
+    if (user?.roles?.includes('owner')) return true;
     return requiredRoles.some((role) => user?.roles?.includes(role));
   }
 }

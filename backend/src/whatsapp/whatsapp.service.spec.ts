@@ -28,6 +28,7 @@ describe('WhatsAppService — Templates & Media (Phase 29)', () => {
       { create: jest.fn() } as any,
       { findMatchingRule: jest.fn() } as any,
       { encrypt: jest.fn((x) => x) } as any,
+      { scheduleRetry: jest.fn() } as any,
     );
   });
 
@@ -65,7 +66,7 @@ describe('WhatsAppService — Templates & Media (Phase 29)', () => {
       mockProvider.sendTemplate.mockResolvedValue({ providerMessageId: 'msg-123' });
       prisma.whatsAppContact.upsert.mockResolvedValue({ id: 'c1' });
       prisma.whatsAppConversation.upsert.mockResolvedValue({ id: 'conv-1' });
-      prisma.whatsAppMessage.create.mockResolvedValue({ id: 'm1' });
+      prisma.whatsAppMessage.create.mockImplementation(({ data }: any) => Promise.resolve({ id: 'm1', ...data }));
 
       const result = await service.sendTemplateMessage('t1', 'u1', 'acc-1', {
         to: '+60123456789',
@@ -103,7 +104,7 @@ describe('WhatsAppService — Templates & Media (Phase 29)', () => {
       mockProvider.sendMedia.mockResolvedValue({ providerMessageId: 'msg-img-1' });
       prisma.whatsAppContact.upsert.mockResolvedValue({ id: 'c1' });
       prisma.whatsAppConversation.upsert.mockResolvedValue({ id: 'conv-1' });
-      prisma.whatsAppMessage.create.mockResolvedValue({ id: 'm1' });
+      prisma.whatsAppMessage.create.mockImplementation(({ data }: any) => Promise.resolve({ id: 'm1', ...data }));
 
       const result = await service.sendMediaMessage('t1', 'u1', 'acc-1', {
         to: '+60123456789',

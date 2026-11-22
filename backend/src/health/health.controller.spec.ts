@@ -4,13 +4,13 @@ import { HealthController } from './health.controller';
 import { PrismaService } from '../common/prisma/prisma.service';
 
 // ioredis is mocked so this test never opens a real socket.
-jest.mock('ioredis', () => {
-  return jest.fn().mockImplementation(() => ({
+jest.mock('ioredis', () => ({
+  Redis: jest.fn().mockImplementation(() => ({
     status: 'ready',
     connect: jest.fn(),
     ping: jest.fn().mockResolvedValue('PONG'),
-  }));
-});
+  })),
+}));
 
 describe('HealthController', () => {
   let controller: HealthController;

@@ -5,7 +5,7 @@ import { WhatsAppProvider, WhatsAppTemplateParams, WhatsAppMediaMessage } from '
 @Injectable()
 export class MockWhatsAppProvider implements WhatsAppProvider {
   async connect(account: { id: string; phoneNumber?: string | null }) {
-    return { status: 'CONNECTED', qr: undefined };
+    return { status: 'CONNECTED' as const, qr: undefined };
   }
 
   async disconnect(_account: { id: string }) {

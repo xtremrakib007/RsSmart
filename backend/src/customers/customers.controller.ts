@@ -17,8 +17,9 @@ export class CustomersController {
     @CurrentUser() user: any,
     @Query('search') search?: string,
     @Query('category') category?: string,
+    @Query('route') route?: string,
   ) {
-    return this.customersService.findAll(user.tenantId, { search, category });
+    return this.customersService.findAll(user.tenantId, { search, category, route }, user);
   }
 
   @Get(':id')
@@ -30,13 +31,13 @@ export class CustomersController {
   @Post()
   @ApiOperation({ summary: 'Create customer' })
   create(@Body() data: any, @CurrentUser() user: any) {
-    return this.customersService.create(user.tenantId, data);
+    return this.customersService.create(user.tenantId, data, user);
   }
 
   @Put(':id')
   @ApiOperation({ summary: 'Update customer' })
   update(@Param('id') id: string, @Body() data: any, @CurrentUser() user: any) {
-    return this.customersService.update(id, user.tenantId, data);
+    return this.customersService.update(id, user.tenantId, data, user);
   }
 
   @Delete(':id')

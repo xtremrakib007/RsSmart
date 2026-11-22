@@ -19,7 +19,7 @@ export class MetaCloudWhatsAppProvider implements WhatsAppProvider {
     const response = await fetch(`${this.baseUrl}/${encodeURIComponent(account.phoneNumberId)}?fields=id,display_phone_number,verified_name`, { headers: { Authorization: `Bearer ${this.token(account)}` } });
     const data: any = await response.json().catch(() => ({}));
     if (!response.ok) throw new ServiceUnavailableException(data?.error?.message || `Meta verification failed (${response.status})`);
-    return { status: 'CONNECTED' };
+    return { status: 'CONNECTED' as const };
   }
 
   async disconnect(_account: { id: string }) {}
@@ -107,7 +107,7 @@ export class MetaCloudWhatsAppProvider implements WhatsAppProvider {
     if (!account.phoneNumberId) throw new ServiceUnavailableException('WhatsApp phoneNumberId is required');
 
     const formData = new FormData();
-    formData.append('file', new Blob([file], { type: mimeType }), 'file');
+    formData.append('file', new Blob([new Uint8Array(file)], { type: mimeType }), 'file');
     formData.append('messaging_product', 'whatsapp');
 
     const response = await fetch(`${this.baseUrl}/${encodeURIComponent(account.phoneNumberId)}/media`, {

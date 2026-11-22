@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { EntitlementsService } from '../entitlements/entitlements.service';
@@ -28,6 +28,10 @@ export class OutletsService {
   }
 
   async create(tenantId: string, actorUserId: string, dto: CreateOutletDto) {
+    // A lapsed (expired, suspended, cancelled) subscription cannot add outlets.
+    if (!(await this.entitlements.isSubscriptionActive(tenantId))) {
+      throw new ForbiddenException('Your subscription is not active. Renew it to add outlets.');
+    }
     // Phase 23 — enforce outlet limit
     const check = await this.entitlements.checkOutletLimit(tenantId);
     if (!check.allowed) {

@@ -1,9 +1,10 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import * as Minio from 'minio';
 import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
 export class UploadService {
+  private readonly logger = new Logger(UploadService.name);
   private minioClient: Minio.Client;
   private bucket: string;
 
@@ -16,7 +17,9 @@ export class UploadService {
       secretKey: process.env.STORAGE_SECRET_KEY || 'minioadmin',
     });
     this.bucket = process.env.STORAGE_BUCKET || 'central-app';
-    this.ensureBucket();
+    // Storage being down at start-up must not crash the API (an unhandled
+    // rejection ends the process); uploads fail with their own error then.
+    this.ensureBucket().catch((e) => this.logger.warn(`Storage bucket check failed: ${e.message}`));
   }
 
   private async ensureBucket() {

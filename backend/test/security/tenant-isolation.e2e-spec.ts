@@ -3,6 +3,7 @@ import { INestApplication } from '@nestjs/common';
 import * as request from 'supertest';
 import { AppModule } from '../../src/app.module';
 import { PrismaService } from '../../src/common/prisma/prisma.service';
+import { UploadService } from '../../src/upload/upload.service';
 import { seedTenant, TestTenant } from './helpers';
 
 describe('Tenant Isolation (Phase 24)', () => {
@@ -12,9 +13,17 @@ describe('Tenant Isolation (Phase 24)', () => {
   let tenantB: TestTenant;
 
   beforeAll(async () => {
+    // File storage is replaced by an in-memory store: these tests check the
+    // tenant-ownership rules in the upload controller, not MinIO.
+    const files = new Set<string>();
+    const fakeStorage = {
+      uploadFile: async (file: any, folder: string) => { const name = `${folder}/${Date.now()}-${file.originalname}`; files.add(name); return name; },
+      getFileUrl: async (name: string) => `https://storage.test/${name}`,
+      deleteFile: async (name: string) => { files.delete(name); },
+    };
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    }).overrideProvider(UploadService).useValue(fakeStorage).compile();
 
     app = moduleFixture.createNestApplication();
     prisma = moduleFixture.get(PrismaService);
@@ -174,7 +183,14 @@ describe('Tenant Isolation (Phase 24)', () => {
         .query({ fromDate: '2020-01-01', toDate: '2030-12-31' })
         .expect(200);
 
-      expect(reportA.body.totalRevenue).not.toBe(reportB.body.totalRevenue);
+      // Both tenants are seeded alike, so compare which orders each report holds.
+      const idsA = reportA.body.orders.map((o: any) => o.id);
+      const idsB = reportB.body.orders.map((o: any) => o.id);
+      expect(idsA).toContain(tenantA.orderId);
+      expect(idsA).not.toContain(tenantB.orderId);
+      expect(idsB).toContain(tenantB.orderId);
+      expect(idsB).not.toContain(tenantA.orderId);
+      expect(reportA.body.orders.every((o: any) => o.tenantId === tenantA.tenantId)).toBe(true);
     });
   });
 

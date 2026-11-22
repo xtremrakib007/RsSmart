@@ -108,7 +108,6 @@ export class SyncHealthService {
         entityId: true,
         error: true,
         createdAt: true,
-        attempts: true,
       },
     });
   }

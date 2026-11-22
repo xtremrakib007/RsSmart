@@ -6,7 +6,8 @@ import { SyncEventProcessor } from './processors/sync-event.processor';
 import { ConflictResolutionService } from './conflict-resolution.service';
 import { SyncHealthService } from './health/sync-health.service';
 import { SyncHealthController } from './health/sync-health.controller';
-import { NotificationsGateway } from '../websocket/notifications.gateway';
+import { WebsocketModule } from '../websocket/websocket.module';
+import { QueueModule } from '../common/queue/queue.module';
 import { PushModule } from '../push/push.module';
 
 @Module({
@@ -15,6 +16,8 @@ import { PushModule } from '../push/push.module';
       name: 'sync-events',
     }),
     PushModule,
+    QueueModule,
+    WebsocketModule,
   ],
   controllers: [SyncController, SyncHealthController],
   providers: [
@@ -22,7 +25,6 @@ import { PushModule } from '../push/push.module';
     SyncEventProcessor,
     ConflictResolutionService,
     SyncHealthService,
-    NotificationsGateway,
   ],
   exports: [SyncService, ConflictResolutionService],
 })

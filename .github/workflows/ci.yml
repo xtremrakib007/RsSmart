@@ -87,6 +87,10 @@ jobs:
       - name: Prisma migrate deploy
         run: npx prisma migrate deploy
 
+      # The migrations must build exactly what schema.prisma describes.
+      - name: Migrations match schema.prisma
+        run: npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --exit-code
+
       - name: Lint
         run: npm run lint
 
@@ -101,10 +105,15 @@ jobs:
       - name: Build
         run: npm run build
 
+      # Checks the production rules with production-shaped dummy values (the
+      # test values above are deliberately short).
       - name: Validate environment variables
         run: npm run validate:env
         env:
           NODE_ENV: production
+          JWT_SECRET: ci-only-placeholder-jwt-secret-0123456789abcdef
+          JWT_REFRESH_SECRET: ci-only-placeholder-refresh-secret-0123456789ab
+          REDIS_PASSWORD: ci-only-placeholder
 
       - name: Verify production readiness
         run: npm run verify:production
@@ -203,6 +212,13 @@ jobs:
         run: ./gradlew assembleDebug
         timeout-minutes: 15
 
+      - name: Upload POS debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: pos-android-debug-apk
+          path: pos-android/app/build/outputs/apk/debug/*.apk
+          retention-days: 14
+
       - name: Run unit tests
         run: ./gradlew test
         timeout-minutes: 10
@@ -227,9 +243,21 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      # google-services.json is not committed (it is project-specific); CI
+      # builds with the placeholder so the Google Services plugin can run.
+      - name: Use the example Firebase config when none is present
+        run: test -f app/google-services.json || cp app/google-services.json.example app/google-services.json
+
       - name: Build debug APK
         run: ./gradlew assembleDebug
         timeout-minutes: 15
+
+      - name: Upload Sales debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: sales-android-debug-apk
+          path: sales-android/app/build/outputs/apk/debug/*.apk
+          retention-days: 14
 
       - name: Run unit tests
         run: ./gradlew test

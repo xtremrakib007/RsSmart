@@ -3,6 +3,8 @@ package com.company.salesapp.sync
 import android.content.Context
 import androidx.work.*
 import com.company.salesapp.data.local.dao.*
+import com.company.salesapp.data.local.entity.CustomerEntity
+import com.company.salesapp.data.local.entity.ProductEntity
 import com.company.salesapp.data.local.entity.SyncEventEntity
 import com.company.salesapp.data.remote.api.SyncApi
 import com.company.salesapp.data.remote.dto.*

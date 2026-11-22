@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.company.salesapp.data.local.dao.OrderDao
 import com.company.salesapp.data.local.dao.CustomerVisitDao
 import com.company.salesapp.data.local.dao.SyncEventDao
+import com.company.salesapp.data.repository.AppConfig
+import com.company.salesapp.data.repository.AppConfigRepository
 import com.company.salesapp.data.repository.AuthRepository
 import com.company.salesapp.data.repository.PushTokenRepository
 import com.company.salesapp.data.repository.SalesRepository
@@ -22,8 +24,12 @@ class DashboardViewModel @Inject constructor(
     private val visitDao: CustomerVisitDao,
     private val syncEventDao: SyncEventDao,
     private val networkObserver: NetworkConnectivityObserver,
-    private val salesRepository: SalesRepository
+    private val salesRepository: SalesRepository,
+    private val appConfigRepository: AppConfigRepository
 ) : ViewModel() {
+
+    /** Server settings: tiles, notice, currency, update prompt. */
+    val config: StateFlow<AppConfig> = appConfigRepository.config
 
     private val _state = MutableStateFlow(DashboardState())
     val state: StateFlow<DashboardState> = _state.asStateFlow()
@@ -34,8 +40,13 @@ class DashboardViewModel @Inject constructor(
     val isOnline: StateFlow<Boolean> = networkObserver.isOnline
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), true)
 
+    /** Admins and managers also get the team screens. */
+    val isManager: StateFlow<Boolean> = authRepository.isManager
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), false)
+
     init {
         refreshServerDashboard()
+        viewModelScope.launch { appConfigRepository.refresh() }
         viewModelScope.launch {
             authRepository.userId.filterNotNull().flatMapLatest { userId ->
                 orderDao.getDrafts(userId)
@@ -56,6 +67,7 @@ class DashboardViewModel @Inject constructor(
     fun logout() {
         viewModelScope.launch {
             pushTokenRepository.unregister()
+            appConfigRepository.clear()
             authRepository.logout()
         }
     }

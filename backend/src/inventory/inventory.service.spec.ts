@@ -14,7 +14,7 @@ describe('InventoryService — outlet isolation', () => {
     prisma = {
       inventory: { findFirst: jest.fn(), findMany: jest.fn(), updateMany: jest.fn(), create: jest.fn() },
       stockMovement: { create: jest.fn(), findMany: jest.fn() },
-      $transaction: jest.fn((ops: any[]) => Promise.all(ops)),
+      $transaction: jest.fn((arg: any) => (typeof arg === "function" ? arg(prisma) : Promise.all(arg))),
     };
     service = new InventoryService(prisma);
   });
@@ -27,11 +27,35 @@ describe('InventoryService — outlet isolation', () => {
     );
   });
 
+  it('the first stock received at an outlet opens its stock record', async () => {
+    prisma.inventory.findFirst.mockResolvedValue(null);
+    prisma.product = { findFirst: jest.fn().mockResolvedValue({ id: productId }) };
+    prisma.inventory.create = jest.fn().mockResolvedValue({ id: 'inv-new', quantity: 0, reserved: 0, version: 0 });
+    prisma.inventory.updateMany.mockResolvedValue({ count: 1 });
+    prisma.stockMovement.create.mockResolvedValue({ id: 'mv-1' });
+
+    const r = await service.adjustStock(tenantId, outletB, 'user-1', { productId, quantity: 5, type: 'INBOUND' });
+
+    expect(prisma.product.findFirst).toHaveBeenCalledWith({ where: { id: productId, tenantId }, select: { id: true } });
+    expect(prisma.inventory.create).toHaveBeenCalledWith({ data: expect.objectContaining({ tenantId, outletId: outletB, productId, quantity: 0 }) });
+    expect(r.inventory.quantity).toBe(5);
+  });
+
+  it('a product of another company cannot open a stock record', async () => {
+    prisma.inventory.findFirst.mockResolvedValue(null);
+    prisma.product = { findFirst: jest.fn().mockResolvedValue(null) };
+    prisma.inventory.create = jest.fn();
+    await expect(
+      service.adjustStock(tenantId, outletB, 'user-1', { productId, quantity: 5, type: 'INBOUND' }),
+    ).rejects.toThrow(NotFoundException);
+    expect(prisma.inventory.create).not.toHaveBeenCalled();
+  });
+
   it('adjustStock looks up inventory scoped to (tenant, outlet, product)', async () => {
     prisma.inventory.findFirst.mockResolvedValue(null);
 
     await expect(
-      service.adjustStock(tenantId, outletB, 'user-1', { productId, quantity: 5, type: 'INBOUND' }),
+      service.adjustStock(tenantId, outletB, 'user-1', { productId, quantity: 5, type: 'OUTBOUND' }),
     ).rejects.toThrow(NotFoundException);
 
     expect(prisma.inventory.findFirst).toHaveBeenCalledWith({
@@ -142,7 +166,7 @@ describe('InventoryService — concurrency & boundary cases (Phase 26)', () => {
     prisma = {
       inventory: { findFirst: jest.fn(), findMany: jest.fn(), updateMany: jest.fn(), create: jest.fn() },
       stockMovement: { create: jest.fn(), findMany: jest.fn() },
-      $transaction: jest.fn((ops: any[]) => Promise.all(ops)),
+      $transaction: jest.fn((arg: any) => (typeof arg === "function" ? arg(prisma) : Promise.all(arg))),
     };
     service = new InventoryService(prisma);
   });
@@ -178,7 +202,7 @@ describe('InventoryService — concurrency & boundary cases (Phase 26)', () => {
     expect(outcomes).toContain('fulfilled');
     expect(outcomes).toContain('rejected');
 
-    const rejected = r1.status === 'rejected' ? r1 : r2;
+    const rejected = (r1.status === 'rejected' ? r1 : r2) as PromiseRejectedResult;
     expect(rejected.reason).toBeInstanceOf(ConflictException);
   });
 

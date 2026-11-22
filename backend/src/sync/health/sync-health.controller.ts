@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query, UseGuards, HttpCode } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import { SyncHealthService } from './sync-health.service';
@@ -37,6 +37,7 @@ export class SyncHealthController {
   }
 
   @Post('retry-failed')
+  @HttpCode(200)
   @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Retry all failed events' })
   @ApiQuery({ name: 'clientId', required: false })

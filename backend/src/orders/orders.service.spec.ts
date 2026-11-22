@@ -22,7 +22,7 @@ describe('OrdersService.updateStatus', () => {
   };
 
   beforeEach(async () => {
-    prisma = { order: { update: jest.fn().mockResolvedValue(updatedOrder) } };
+    prisma = { order: { update: jest.fn().mockResolvedValue(updatedOrder), findFirst: jest.fn().mockResolvedValue({ id: updatedOrder.id }) } };
     notifications = { sendOrderConfirmationIfApplicable: jest.fn().mockResolvedValue(undefined) };
     push = { sendToUser: jest.fn().mockResolvedValue(undefined) };
 
@@ -36,6 +36,13 @@ describe('OrdersService.updateStatus', () => {
     }).compile();
 
     service = module.get<OrdersService>(OrdersService);
+  });
+
+  it("does not change another company's order", async () => {
+    prisma.order.findFirst.mockResolvedValue(null);
+    await expect(service.updateStatus('order-of-b', 'tenant-a', 'CANCELLED')).rejects.toThrow('Order not found');
+    expect(prisma.order.findFirst).toHaveBeenCalledWith({ where: { id: 'order-of-b', tenantId: 'tenant-a' }, select: { id: true } });
+    expect(prisma.order.update).not.toHaveBeenCalled();
   });
 
   it('triggers a customer confirmation and a push to the sales rep when status transitions to APPROVED', async () => {

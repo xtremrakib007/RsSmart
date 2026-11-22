@@ -90,14 +90,14 @@ describe('Outlet Isolation (Phase 24)', () => {
         .post('/inventory/adjust')
         .set('Authorization', `Bearer ${tenant.ownerToken}`)
         .set('x-outlet-id', tenant.outletId)
-        .send({ productId: tenant.productId, quantity: 100, reason: 'Initial stock' })
+        .send({ productId: tenant.productId, quantity: 100, type: 'INBOUND', notes: 'Initial stock' })
         .expect(201);
 
       await request(app.getHttpServer())
         .post('/inventory/adjust')
         .set('Authorization', `Bearer ${tenant.ownerToken}`)
         .set('x-outlet-id', tenant.secondOutletId)
-        .send({ productId: tenant.productId, quantity: 50, reason: 'Initial stock' })
+        .send({ productId: tenant.productId, quantity: 50, type: 'INBOUND', notes: 'Initial stock' })
         .expect(201);
 
       const outlet1Stock = await request(app.getHttpServer())
@@ -112,8 +112,9 @@ describe('Outlet Isolation (Phase 24)', () => {
         .set('x-outlet-id', tenant.secondOutletId)
         .expect(200);
 
-      const qty1 = outlet1Stock.body.find((s: any) => s.productId === tenant.productId)?.quantity;
-      const qty2 = outlet2Stock.body.find((s: any) => s.productId === tenant.productId)?.quantity;
+      // Quantities are decimals, sent as strings.
+      const qty1 = Number(outlet1Stock.body.find((s: any) => s.productId === tenant.productId)?.quantity);
+      const qty2 = Number(outlet2Stock.body.find((s: any) => s.productId === tenant.productId)?.quantity);
 
       expect(qty1).toBe(100);
       expect(qty2).toBe(50);
